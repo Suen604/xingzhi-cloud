@@ -14,7 +14,7 @@ import (
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
-	serverCmd.PersistentFlags().StringVarP(&licenseKey, "license-key", "l", "", "License key of your Cloudreve Pro")
+	serverCmd.PersistentFlags().StringVarP(&licenseKey, "license-key", "l", "", "Ignored compatibility option; no license key is required")
 }
 
 var serverCmd = &cobra.Command{

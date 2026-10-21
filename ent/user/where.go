@@ -90,6 +90,11 @@ func Storage(v int64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldStorage, v))
 }
 
+// ExtraStorage applies equality check predicate on the "extra_storage" field. It's identical to ExtraStorageEQ.
+func ExtraStorage(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldExtraStorage, v))
+}
+
 // TwoFactorSecret applies equality check predicate on the "two_factor_secret" field. It's identical to TwoFactorSecretEQ.
 func TwoFactorSecret(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldTwoFactorSecret, v))
@@ -498,6 +503,46 @@ func StorageLT(v int64) predicate.User {
 // StorageLTE applies the LTE predicate on the "storage" field.
 func StorageLTE(v int64) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldStorage, v))
+}
+
+// ExtraStorageEQ applies the EQ predicate on the "extra_storage" field.
+func ExtraStorageEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldExtraStorage, v))
+}
+
+// ExtraStorageNEQ applies the NEQ predicate on the "extra_storage" field.
+func ExtraStorageNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldExtraStorage, v))
+}
+
+// ExtraStorageIn applies the In predicate on the "extra_storage" field.
+func ExtraStorageIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldExtraStorage, vs...))
+}
+
+// ExtraStorageNotIn applies the NotIn predicate on the "extra_storage" field.
+func ExtraStorageNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldExtraStorage, vs...))
+}
+
+// ExtraStorageGT applies the GT predicate on the "extra_storage" field.
+func ExtraStorageGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldExtraStorage, v))
+}
+
+// ExtraStorageGTE applies the GTE predicate on the "extra_storage" field.
+func ExtraStorageGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldExtraStorage, v))
+}
+
+// ExtraStorageLT applies the LT predicate on the "extra_storage" field.
+func ExtraStorageLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldExtraStorage, v))
+}
+
+// ExtraStorageLTE applies the LTE predicate on the "extra_storage" field.
+func ExtraStorageLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldExtraStorage, v))
 }
 
 // TwoFactorSecretEQ applies the EQ predicate on the "two_factor_secret" field.

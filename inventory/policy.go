@@ -2,8 +2,10 @@ package inventory
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/gob"
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/cloudreve/Cloudreve/v4/ent"
@@ -32,6 +34,7 @@ type (
 		GetByGroup(ctx context.Context, group *ent.Group) (*ent.StoragePolicy, error)
 		// GetPolicyByID returns the storage policy by id.
 		GetPolicyByID(ctx context.Context, id int) (*ent.StoragePolicy, error)
+		ResolveBalancedPolicy(ctx context.Context, policy *ent.StoragePolicy) (*ent.StoragePolicy, error)
 		// UpdateAccessKey updates the access key of the storage policy. It also clear related cache in KV.
 		UpdateAccessKey(ctx context.Context, policy *ent.StoragePolicy, token string) error
 		// ListPolicyByType returns the storage policies by type.
@@ -65,6 +68,29 @@ type storagePolicyClient struct {
 	cache  cache.Driver
 }
 
+// ResolveBalancedPolicy picks a physical destination once per upload. The resolved
+// policy is persisted on the entity, so subsequent reads never rebalance a file.
+func (c *storagePolicyClient) ResolveBalancedPolicy(ctx context.Context, policy *ent.StoragePolicy) (*ent.StoragePolicy, error) {
+	if policy.Type != types.PolicyTypeLoadBalance {
+		return policy, nil
+	}
+	if policy.Settings == nil || len(policy.Settings.BalancedPolicies) == 0 {
+		return nil, fmt.Errorf("load balancing policy has no destinations")
+	}
+	index, err := rand.Int(rand.Reader, big.NewInt(int64(len(policy.Settings.BalancedPolicies))))
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := c.GetPolicyByID(ctx, policy.Settings.BalancedPolicies[index.Int64()])
+	if err != nil {
+		return nil, err
+	}
+	if resolved.Type == types.PolicyTypeLoadBalance {
+		return nil, fmt.Errorf("nested load balancing policies are not supported")
+	}
+	return resolved, nil
+}
+
 func (c *storagePolicyClient) SetClient(newClient *ent.Client) TxOperator {
 	return &storagePolicyClient{client: newClient, cache: c.cache}
 }
@@ -74,6 +100,20 @@ func (c *storagePolicyClient) GetClient() *ent.Client {
 }
 
 func (c *storagePolicyClient) Delete(ctx context.Context, policy *ent.StoragePolicy) error {
+	balanced, err := c.ListPolicyByType(ctx, types.PolicyTypeLoadBalance)
+	if err != nil {
+		return err
+	}
+	for _, parent := range balanced {
+		if parent.Settings == nil {
+			continue
+		}
+		for _, id := range parent.Settings.BalancedPolicies {
+			if id == policy.ID {
+				return fmt.Errorf("storage policy is referenced by load balancing policy %d", parent.ID)
+			}
+		}
+	}
 	if err := c.client.StoragePolicy.DeleteOne(policy).Exec(ctx); err != nil {
 		return fmt.Errorf("failed to delete storage policy: %w", err)
 	}
@@ -86,6 +126,36 @@ func (c *storagePolicyClient) Delete(ctx context.Context, policy *ent.StoragePol
 }
 
 func (c *storagePolicyClient) Upsert(ctx context.Context, policy *ent.StoragePolicy) (*ent.StoragePolicy, error) {
+	if policy.Type == types.PolicyTypeLoadBalance {
+		parents, err := c.ListPolicyByType(ctx, types.PolicyTypeLoadBalance)
+		if err != nil {
+			return nil, err
+		}
+		for _, parent := range parents {
+			if parent.ID == policy.ID || parent.Settings == nil {
+				continue
+			}
+			for _, id := range parent.Settings.BalancedPolicies {
+				if id == policy.ID {
+					return nil, fmt.Errorf("cannot convert a referenced physical destination into a load balancing policy")
+				}
+			}
+		}
+		if policy.Settings == nil || len(policy.Settings.BalancedPolicies) == 0 {
+			return nil, fmt.Errorf("select at least one physical storage policy")
+		}
+		seen := map[int]bool{}
+		for _, id := range policy.Settings.BalancedPolicies {
+			if id == policy.ID || seen[id] {
+				return nil, fmt.Errorf("invalid or duplicate load balancing destination")
+			}
+			destination, err := c.GetPolicyByID(ctx, id)
+			if err != nil || destination.Type == types.PolicyTypeLoadBalance {
+				return nil, fmt.Errorf("load balancing destinations must be physical storage policies")
+			}
+			seen[id] = true
+		}
+	}
 	var nodeId *int
 	if policy.NodeID != 0 {
 		nodeId = &policy.NodeID

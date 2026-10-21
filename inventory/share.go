@@ -67,6 +67,7 @@ type (
 		OwnerID         int
 		FileID          int
 		Props           *types.ShareProps
+		Price           int64
 	}
 
 	ListShareArgs struct {
@@ -115,7 +116,7 @@ func (c *shareClient) CountByTimeRange(ctx context.Context, start, end *time.Tim
 func (c *shareClient) Upsert(ctx context.Context, params *CreateShareParams) (*ent.Share, error) {
 	if params.Existed != nil {
 		createQuery := c.client.Share.
-			UpdateOne(params.Existed)
+			UpdateOne(params.Existed).SetPrice(params.Price)
 		if params.RemainDownloads > 0 {
 			createQuery.SetRemainDownloads(params.RemainDownloads)
 		} else {
@@ -136,6 +137,7 @@ func (c *shareClient) Upsert(ctx context.Context, params *CreateShareParams) (*e
 
 	query := c.client.Share.
 		Create().
+		SetPrice(params.Price).
 		SetUserID(params.OwnerID).
 		SetFileID(params.FileID)
 	if params.Password != "" {

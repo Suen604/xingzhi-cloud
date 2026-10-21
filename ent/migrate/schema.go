@@ -8,6 +8,54 @@ import (
 )
 
 var (
+	// AbuseReportsColumns holds the columns for the "abuse_reports" table.
+	AbuseReportsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "reporter_id", Type: field.TypeInt},
+		{Name: "share_id", Type: field.TypeInt},
+		{Name: "reason", Type: field.TypeString, Size: 2000},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"open", "resolved", "dismissed"}, Default: "open"},
+		{Name: "resolution", Type: field.TypeString, Nullable: true, Size: 2000},
+	}
+	// AbuseReportsTable holds the schema information for the "abuse_reports" table.
+	AbuseReportsTable = &schema.Table{
+		Name:       "abuse_reports",
+		Columns:    AbuseReportsColumns,
+		PrimaryKey: []*schema.Column{AbuseReportsColumns[0]},
+	}
+	// AuditLogsColumns holds the columns for the "audit_logs" table.
+	AuditLogsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "actor_id", Type: field.TypeInt, Default: 0},
+		{Name: "action", Type: field.TypeString},
+		{Name: "resource", Type: field.TypeString, Nullable: true},
+		{Name: "ip", Type: field.TypeString, Nullable: true},
+		{Name: "status", Type: field.TypeInt, Default: 0},
+	}
+	// AuditLogsTable holds the schema information for the "audit_logs" table.
+	AuditLogsTable = &schema.Table{
+		Name:       "audit_logs",
+		Columns:    AuditLogsColumns,
+		PrimaryKey: []*schema.Column{AuditLogsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "auditlog_actor_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AuditLogsColumns[4], AuditLogsColumns[1]},
+			},
+			{
+				Name:    "auditlog_action_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AuditLogsColumns[5], AuditLogsColumns[1]},
+			},
+		},
+	}
 	// DavAccountsColumns holds the columns for the "dav_accounts" table.
 	DavAccountsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -102,6 +150,34 @@ var (
 			},
 		},
 	}
+	// ExternalIdentitiesColumns holds the columns for the "external_identities" table.
+	ExternalIdentitiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "provider", Type: field.TypeString},
+		{Name: "subject", Type: field.TypeString, Size: 255},
+	}
+	// ExternalIdentitiesTable holds the schema information for the "external_identities" table.
+	ExternalIdentitiesTable = &schema.Table{
+		Name:       "external_identities",
+		Columns:    ExternalIdentitiesColumns,
+		PrimaryKey: []*schema.Column{ExternalIdentitiesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "externalidentity_provider_subject",
+				Unique:  true,
+				Columns: []*schema.Column{ExternalIdentitiesColumns[5], ExternalIdentitiesColumns[6]},
+			},
+			{
+				Name:    "externalidentity_user_id_provider",
+				Unique:  true,
+				Columns: []*schema.Column{ExternalIdentitiesColumns[4], ExternalIdentitiesColumns[5]},
+			},
+		},
+	}
 	// FilesColumns holds the columns for the "files" table.
 	FilesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -165,6 +241,31 @@ var (
 			},
 		},
 	}
+	// FilePermissionsColumns holds the columns for the "file_permissions" table.
+	FilePermissionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "file_id", Type: field.TypeInt},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "role", Type: field.TypeEnum, Enums: []string{"viewer", "editor"}},
+	}
+	// FilePermissionsTable holds the schema information for the "file_permissions" table.
+	FilePermissionsTable = &schema.Table{
+		Name:       "file_permissions",
+		Columns:    FilePermissionsColumns,
+		PrimaryKey: []*schema.Column{FilePermissionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "filepermission_file_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{FilePermissionsColumns[1], FilePermissionsColumns[2]},
+			},
+			{
+				Name:    "filepermission_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{FilePermissionsColumns[2]},
+			},
+		},
+	}
 	// FsEventsColumns holds the columns for the "fs_events" table.
 	FsEventsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -188,6 +289,26 @@ var (
 				OnDelete:   schema.SetNull,
 			},
 		},
+	}
+	// GiftCodesColumns holds the columns for the "gift_codes" table.
+	GiftCodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "code_hash", Type: field.TypeString, Unique: true},
+		{Name: "product_name", Type: field.TypeString},
+		{Name: "storage_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "group_id", Type: field.TypeInt, Default: 0},
+		{Name: "redeemed_by", Type: field.TypeInt, Default: 0},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "redeemed_at", Type: field.TypeTime, Nullable: true},
+	}
+	// GiftCodesTable holds the schema information for the "gift_codes" table.
+	GiftCodesTable = &schema.Table{
+		Name:       "gift_codes",
+		Columns:    GiftCodesColumns,
+		PrimaryKey: []*schema.Column{GiftCodesColumns[0]},
 	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
@@ -361,6 +482,56 @@ var (
 			},
 		},
 	}
+	// PurchaseOrdersColumns holds the columns for the "purchase_orders" table.
+	PurchaseOrdersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "number", Type: field.TypeString, Unique: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "provider", Type: field.TypeString},
+		{Name: "product_id", Type: field.TypeString},
+		{Name: "product_name", Type: field.TypeString},
+		{Name: "amount", Type: field.TypeInt64},
+		{Name: "currency", Type: field.TypeString, Default: "CNY"},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "paid", "fulfilled", "cancelled"}, Default: "pending"},
+		{Name: "transaction_id", Type: field.TypeString, Nullable: true},
+		{Name: "storage_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "group_id", Type: field.TypeInt, Default: 0},
+		{Name: "share_id", Type: field.TypeInt, Default: 0},
+		{Name: "file_id", Type: field.TypeInt, Default: 0},
+		{Name: "seller_id", Type: field.TypeInt, Default: 0},
+		{Name: "expires_at", Type: field.TypeTime},
+	}
+	// PurchaseOrdersTable holds the schema information for the "purchase_orders" table.
+	PurchaseOrdersTable = &schema.Table{
+		Name:       "purchase_orders",
+		Columns:    PurchaseOrdersColumns,
+		PrimaryKey: []*schema.Column{PurchaseOrdersColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "purchaseorder_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PurchaseOrdersColumns[5], PurchaseOrdersColumns[1]},
+			},
+			{
+				Name:    "purchaseorder_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PurchaseOrdersColumns[11], PurchaseOrdersColumns[1]},
+			},
+			{
+				Name:    "purchaseorder_user_id_share_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{PurchaseOrdersColumns[5], PurchaseOrdersColumns[15], PurchaseOrdersColumns[11]},
+			},
+			{
+				Name:    "purchaseorder_seller_id_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PurchaseOrdersColumns[17], PurchaseOrdersColumns[11], PurchaseOrdersColumns[1]},
+			},
+		},
+	}
 	// SettingsColumns holds the columns for the "settings" table.
 	SettingsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -382,6 +553,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
 		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime"}},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime"}},
+		{Name: "price", Type: field.TypeInt64, Default: 0},
 		{Name: "password", Type: field.TypeString, Nullable: true},
 		{Name: "views", Type: field.TypeInt, Default: 0},
 		{Name: "downloads", Type: field.TypeInt, Default: 0},
@@ -399,13 +571,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "shares_files_shares",
-				Columns:    []*schema.Column{SharesColumns[10]},
+				Columns:    []*schema.Column{SharesColumns[11]},
 				RefColumns: []*schema.Column{FilesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "shares_users_shares",
-				Columns:    []*schema.Column{SharesColumns[11]},
+				Columns:    []*schema.Column{SharesColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -482,6 +654,7 @@ var (
 		{Name: "password", Type: field.TypeString, Nullable: true},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "inactive", "manual_banned", "sys_banned"}, Default: "active"},
 		{Name: "storage", Type: field.TypeInt64, Default: 0},
+		{Name: "extra_storage", Type: field.TypeInt64, Default: 0},
 		{Name: "two_factor_secret", Type: field.TypeString, Nullable: true},
 		{Name: "avatar", Type: field.TypeString, Nullable: true},
 		{Name: "settings", Type: field.TypeJSON, Nullable: true},
@@ -495,7 +668,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_groups_users",
-				Columns:    []*schema.Column{UsersColumns[12]},
+				Columns:    []*schema.Column{UsersColumns[13]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -528,17 +701,23 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		AbuseReportsTable,
+		AuditLogsTable,
 		DavAccountsTable,
 		DirectLinksTable,
 		EntitiesTable,
+		ExternalIdentitiesTable,
 		FilesTable,
+		FilePermissionsTable,
 		FsEventsTable,
+		GiftCodesTable,
 		GroupsTable,
 		MetadataTable,
 		NodesTable,
 		OauthClientsTable,
 		OauthGrantsTable,
 		PasskeysTable,
+		PurchaseOrdersTable,
 		SettingsTable,
 		SharesTable,
 		StoragePoliciesTable,

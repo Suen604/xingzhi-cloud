@@ -1,8 +1,10 @@
 package explorer
 
 import (
+	"context"
 	"time"
 
+	"github.com/cloudreve/Cloudreve/v4/application/constants"
 	"github.com/cloudreve/Cloudreve/v4/application/dependency"
 	"github.com/cloudreve/Cloudreve/v4/inventory"
 	"github.com/cloudreve/Cloudreve/v4/pkg/auth/requestinfo"
@@ -75,6 +77,31 @@ func (s *ExplorerEventService) HandleExplorerEventsPush(c *gin.Context) error {
 
 	keepAliveTicker := time.NewTicker(30 * time.Second)
 	defer keepAliveTicker.Stop()
+	defer eventHub.Unsubscribe(c, parent.ID(), requestInfo.ClientID)
+	canReceive := func() bool {
+		if uri.FileSystem() == constants.FileSystemShare {
+			ctx := context.WithValue(c, inventory.LoadShareUser{}, true)
+			ctx = context.WithValue(ctx, inventory.LoadShareFile{}, true)
+			share, err := dep.ShareClient().GetByHashID(ctx, uri.ID(""))
+			if err != nil || inventory.IsValidShare(share) != nil || share.Edges.File.ID != parent.ID() {
+				return false
+			}
+			if share.Password != "" && share.Password != uri.Password() {
+				return false
+			}
+			allowed, err := inventory.CanAccessPaidShare(c, dep.DBClient(), share, user)
+			if err != nil || !allowed {
+				return false
+			}
+			role, err := inventory.FilePermissionRole(c, dep.DBClient(), share.Edges.File.ID, share.Edges.User.ID)
+			return err == nil && role == inventory.FileRoleOwner
+		}
+		if uri.FileSystem() != constants.FileSystemMy || parent.OwnerID() == user.ID {
+			return true
+		}
+		role, err := inventory.FilePermissionRole(c, dep.DBClient(), parent.ID(), user.ID)
+		return err == nil && role != ""
+	}
 
 	if resumed {
 		c.SSEvent("resumed", nil)
@@ -102,6 +129,9 @@ func (s *ExplorerEventService) HandleExplorerEventsPush(c *gin.Context) error {
 				l.Debug("Event hub closed, disconnecting client")
 				return nil
 			}
+			if !canReceive() {
+				return nil
+			}
 			c.SSEvent("event", evt)
 			l.Debug("Event sent: %+v", evt)
 			c.Writer.Flush()
@@ -112,6 +142,9 @@ func (s *ExplorerEventService) HandleExplorerEventsPush(c *gin.Context) error {
 				return nil
 			}
 		case <-keepAliveTicker.C:
+			if !canReceive() {
+				return nil
+			}
 			c.SSEvent("keep-alive", nil)
 			c.Writer.Flush()
 		}

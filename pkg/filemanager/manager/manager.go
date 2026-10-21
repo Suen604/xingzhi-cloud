@@ -123,6 +123,7 @@ type (
 		Expire          *time.Time
 		ShareView       bool
 		ShowReadMe      bool
+		Price           *int64
 	}
 
 	FullTextSearchResults struct {

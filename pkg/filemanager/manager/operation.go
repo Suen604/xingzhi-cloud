@@ -285,6 +285,9 @@ func (l *manager) Restore(ctx context.Context, path ...*fs.URI) error {
 }
 
 func (l *manager) CreateOrUpdateShare(ctx context.Context, path *fs.URI, args *CreateShareArgs) (*ent.Share, error) {
+	if args.Price != nil && (*args.Price < 0 || *args.Price > 100000000) {
+		return nil, serializer.NewError(serializer.CodeParamErr, "invalid share price", nil)
+	}
 	file, err := l.fs.Get(ctx, path, dbfs.WithRequiredCapabilities(dbfs.NavigatorCapabilityShare), dbfs.WithNotRoot())
 	if err != nil {
 		return nil, serializer.NewError(serializer.CodeNotFound, "src file not found", err)
@@ -325,6 +328,12 @@ func (l *manager) CreateOrUpdateShare(ctx context.Context, path *fs.URI, args *C
 		ShareView:  args.ShareView,
 		ShowReadMe: args.ShowReadMe,
 	}
+	price := int64(0)
+	if args.Price != nil {
+		price = *args.Price
+	} else if existed != nil {
+		price = existed.Price
+	}
 
 	share, err := shareClient.Upsert(ctx, &inventory.CreateShareParams{
 		OwnerID:         file.OwnerID(),
@@ -334,6 +343,7 @@ func (l *manager) CreateOrUpdateShare(ctx context.Context, path *fs.URI, args *C
 		RemainDownloads: args.RemainDownloads,
 		Existed:         existed,
 		Props:           props,
+		Price:           price,
 	})
 
 	if err != nil {

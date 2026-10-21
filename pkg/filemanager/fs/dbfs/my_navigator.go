@@ -42,6 +42,7 @@ type myNavigator struct {
 	root           *File
 	disableRecycle bool
 	persist        func()
+	currentCaps    *boolset.BooleanSet
 }
 
 func (n *myNavigator) Recycle() {
@@ -82,9 +83,6 @@ func (n *myNavigator) To(ctx context.Context, path *fs.URI) (*File, error) {
 		if err != nil {
 			return nil, fs.ErrPathNotExist.WithError(fmt.Errorf("invalid user id"))
 		}
-		if fsUid != n.user.ID {
-			return nil, ErrPermissionDenied
-		}
 
 		ctx = context.WithValue(ctx, inventory.LoadUserGroup{}, true)
 		targetUser, err := n.userClient.GetByID(ctx, fsUid)
@@ -98,6 +96,9 @@ func (n *myNavigator) To(ctx context.Context, path *fs.URI) (*File, error) {
 
 		rootFile, err := n.fileClient.Root(ctx, targetUser)
 		if err != nil {
+			if fsUid != n.user.ID {
+				return nil, ErrPermissionDenied
+			}
 			n.l.Info("User's root folder not found: %s, will initialize it.", err)
 			return nil, ErrFsNotInitialized
 		}
@@ -118,15 +119,47 @@ func (n *myNavigator) To(ctx context.Context, path *fs.URI) (*File, error) {
 		lastAncestor = current
 		current, err = n.walkNext(ctx, current, element, index == len(elements)-1)
 		if err != nil {
+			if accessErr := n.authorize(ctx, lastAncestor); accessErr != nil {
+				return nil, accessErr
+			}
 			return lastAncestor, fmt.Errorf("failed to walk into %q: %w", element, err)
 		}
 	}
 
+	if err := n.authorize(ctx, current); err != nil {
+		return nil, err
+	}
 	return current, nil
 }
 
 func (n *myNavigator) Children(ctx context.Context, parent *File, args *ListArgs) (*ListResult, error) {
-	return n.baseNavigator.children(ctx, parent, args)
+	res, err := n.baseNavigator.children(ctx, parent, args)
+	if err != nil {
+		return nil, err
+	}
+	if parent.OwnerID() != n.user.ID {
+		for _, child := range res.Files {
+			role, err := n.fileClient.PermissionRole(ctx, child.Model, n.user.ID)
+			if err != nil || role == "" {
+				return nil, ErrPermissionDenied
+			}
+			child.CapabilitiesBs = collaborationCapabilities(role)
+		}
+	}
+	return res, nil
+}
+
+func (n *myNavigator) authorize(ctx context.Context, target *File) error {
+	n.currentCaps = myNavigatorCapability
+	if target.OwnerID() != n.user.ID {
+		role, err := n.fileClient.PermissionRole(ctx, target.Model, n.user.ID)
+		if err != nil || role == "" {
+			return ErrPermissionDenied
+		}
+		n.currentCaps = collaborationCapabilities(role)
+	}
+	target.CapabilitiesBs = n.currentCaps
+	return nil
 }
 
 func (n *myNavigator) walkNext(ctx context.Context, root *File, next string, isLeaf bool) (*File, error) {
@@ -134,8 +167,12 @@ func (n *myNavigator) walkNext(ctx context.Context, root *File, next string, isL
 }
 
 func (n *myNavigator) Capabilities(isSearching bool) *fs.NavigatorProps {
+	caps := n.currentCaps
+	if caps == nil {
+		caps = myNavigatorCapability
+	}
 	res := &fs.NavigatorProps{
-		Capability:            myNavigatorCapability,
+		Capability:            caps,
 		OrderDirectionOptions: fullOrderDirectionOption,
 		OrderByOptions:        fullOrderByOption,
 		MaxPageSize:           n.config.MaxPageSize,

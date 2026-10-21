@@ -33,9 +33,8 @@ func (f *DBFS) PreValidateUpload(ctx context.Context, dst *fs.URI, files ...fs.P
 		return fmt.Errorf("destination is not a folder")
 	}
 
-	// check ownership
-	if f.user.ID != dstFile.OwnerID() {
-		return fmt.Errorf("failed to evaluate permission: %w", err)
+	if !f.canEdit(ctx, dstFile) {
+		return ErrPermissionDenied
 	}
 
 	total := int64(0)
@@ -107,7 +106,7 @@ func (f *DBFS) PrepareUpload(ctx context.Context, req *fs.UploadRequest, opts ..
 		return nil, fs.ErrPathNotExist
 	}
 
-	if _, ok := ctx.Value(ByPassOwnerCheckCtxKey{}).(bool); !ok && ancestor.OwnerID() != f.user.ID {
+	if !f.canEdit(ctx, ancestor) {
 		return nil, fs.ErrOwnerOnly
 	}
 
@@ -167,9 +166,9 @@ func (f *DBFS) PrepareUpload(ctx context.Context, req *fs.UploadRequest, opts ..
 		(req.Props.EntityType != nil && *req.Props.EntityType == types.EntityTypeThumbnail) &&
 		req.ImportFrom == nil
 	if req.Props.SavePath == "" || isThumbnailAndPolicyNotAvailable {
-		req.Props.SavePath = generateSavePath(policy, req, f.user)
+		req.Props.SavePath = generateSavePath(policy, req, owner)
 		if isThumbnailAndPolicyNotAvailable {
-			req.Props.SavePath = path.Clean(util.ReplaceMagicVar(f.settingClient.ThumbEntitySuffix(ctx), fs.Separator, true, true, time.Now(), f.user.ID, req.Props.Uri.Name(), req.Props.Uri.Path(), req.Props.SavePath))
+			req.Props.SavePath = path.Clean(util.ReplaceMagicVar(f.settingClient.ThumbEntitySuffix(ctx), fs.Separator, true, true, time.Now(), owner.ID, req.Props.Uri.Name(), req.Props.Uri.Path(), req.Props.SavePath))
 		}
 	}
 
@@ -277,6 +276,9 @@ func (f *DBFS) PrepareUpload(ctx context.Context, req *fs.UploadRequest, opts ..
 }
 
 func (f *DBFS) CompleteUpload(ctx context.Context, session *fs.UploadSession) (fs.File, error) {
+	if session.UID != f.user.ID {
+		return nil, ErrPermissionDenied
+	}
 	// Get placeholder file
 	file, err := f.Get(ctx, session.Props.Uri, WithFileEntities(), WithNotRoot())
 	if err != nil {
@@ -284,6 +286,9 @@ func (f *DBFS) CompleteUpload(ctx context.Context, session *fs.UploadSession) (f
 	}
 
 	filePrivate := file.(*File)
+	if !f.canEdit(ctx, filePrivate) {
+		return nil, ErrPermissionDenied
+	}
 
 	// Confirm locks on placeholder file
 	if session.LockToken != "" {
@@ -409,7 +414,7 @@ func (f *DBFS) CancelUploadSession(ctx context.Context, path *fs.URI, sessionID 
 		}
 	}
 
-	if _, ok := ctx.Value(ByPassOwnerCheckCtxKey{}).(bool); !ok && filePrivate.OwnerID() != f.user.ID {
+	if !f.canEdit(ctx, filePrivate) {
 		return nil, nil, fs.ErrOwnerOnly
 	}
 

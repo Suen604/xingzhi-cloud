@@ -7,16 +7,17 @@ import (
 // UserSetting 用户其他配置
 type (
 	UserSetting struct {
-		ProfileOff          bool                     `json:"profile_off,omitempty"`
-		PreferredTheme      string                   `json:"preferred_theme,omitempty"`
-		VersionRetention    bool                     `json:"version_retention,omitempty"`
-		VersionRetentionExt []string                 `json:"version_retention_ext,omitempty"`
-		VersionRetentionMax int                      `json:"version_retention_max,omitempty"`
-		Pined               []PinedFile              `json:"pined,omitempty"`
-		Language            string                   `json:"email_language,omitempty"`
-		DisableViewSync     bool                     `json:"disable_view_sync,omitempty"`
-		FsViewMap           map[string]ExplorerView  `json:"fs_view_map,omitempty"`
-		ShareLinksInProfile ShareLinksInProfileLevel `json:"share_links_in_profile,omitempty"`
+		ProfileOff             bool                     `json:"profile_off,omitempty"`
+		PreferredTheme         string                   `json:"preferred_theme,omitempty"`
+		VersionRetention       bool                     `json:"version_retention,omitempty"`
+		VersionRetentionExt    []string                 `json:"version_retention_ext,omitempty"`
+		VersionRetentionMax    int                      `json:"version_retention_max,omitempty"`
+		Pined                  []PinedFile              `json:"pined,omitempty"`
+		Language               string                   `json:"email_language,omitempty"`
+		DisableViewSync        bool                     `json:"disable_view_sync,omitempty"`
+		FsViewMap              map[string]ExplorerView  `json:"fs_view_map,omitempty"`
+		ShareLinksInProfile    ShareLinksInProfileLevel `json:"share_links_in_profile,omitempty"`
+		PreferredStoragePolicy int                      `json:"preferred_storage_policy,omitempty"`
 	}
 
 	ShareLinksInProfileLevel string
@@ -36,6 +37,8 @@ type (
 		MaxWalkedFiles        int                    `json:"max_walked_files,omitempty"`
 		TrashRetention        int                    `json:"trash_retention,omitempty"`
 		RedirectedSource      bool                   `json:"redirected_source,omitempty"`
+		AllowedPolicies       []int                  `json:"allowed_policies,omitempty"`
+		DefaultPinned         []PinedFile            `json:"default_pinned,omitempty"`
 	}
 
 	// PolicySetting 非公有的存储策略属性
@@ -104,7 +107,8 @@ type (
 		// ChunkConcurrency the number of chunks to upload concurrently.
 		ChunkConcurrency int `json:"chunk_concurrency,omitempty"`
 		// Whether to enable file encryption.
-		Encryption bool `json:"encryption,omitempty"`
+		Encryption       bool  `json:"encryption,omitempty"`
+		BalancedPolicies []int `json:"balanced_policies,omitempty"`
 	}
 
 	FileType         int
@@ -299,16 +303,17 @@ const (
 )
 
 const (
-	PolicyTypeLocal  = "local"
-	PolicyTypeQiniu  = "qiniu"
-	PolicyTypeUpyun  = "upyun"
-	PolicyTypeOss    = "oss"
-	PolicyTypeCos    = "cos"
-	PolicyTypeS3     = "s3"
-	PolicyTypeKs3    = "ks3"
-	PolicyTypeOd     = "onedrive"
-	PolicyTypeRemote = "remote"
-	PolicyTypeObs    = "obs"
+	PolicyTypeLocal       = "local"
+	PolicyTypeQiniu       = "qiniu"
+	PolicyTypeUpyun       = "upyun"
+	PolicyTypeOss         = "oss"
+	PolicyTypeCos         = "cos"
+	PolicyTypeS3          = "s3"
+	PolicyTypeKs3         = "ks3"
+	PolicyTypeOd          = "onedrive"
+	PolicyTypeRemote      = "remote"
+	PolicyTypeObs         = "obs"
+	PolicyTypeLoadBalance = "load_balance"
 )
 
 const (
@@ -374,6 +379,7 @@ type (
 
 const (
 	CustomPropsTypeText        = "text"
+	CustomPropsTypeUser        = "user"
 	CustomPropsTypeNumber      = "number"
 	CustomPropsTypeBoolean     = "boolean"
 	CustomPropsTypeSelect      = "select"

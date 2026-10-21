@@ -87,15 +87,40 @@ func (t *sharedWithMeNavigator) To(ctx context.Context, path *fs.URI) (*File, er
 
 func (t *sharedWithMeNavigator) Children(ctx context.Context, parent *File, args *ListArgs) (*ListResult, error) {
 	args.SharedWithMe = true
+	ctx = context.WithValue(ctx, inventory.LoadFileUser{}, true)
+	ctx = context.WithValue(ctx, inventory.LoadUserGroup{}, true)
 	res, err := t.baseNavigator.children(ctx, nil, args)
 	if err != nil {
 		return nil, err
 	}
 
-	// Adding user uri for each file.
-	for i := 0; i < len(res.Files); i++ {
-		res.Files[i].Path[pathIndexUser] = newSharedWithMeUri(hashid.EncodeFileID(t.hasher, res.Files[i].Model.ID))
+	// Use canonical owner URIs. The My navigator rechecks grants on every access.
+	visible := make([]*File, 0, len(res.Files))
+	for _, child := range res.Files {
+		role, err := t.fileClient.PermissionRole(ctx, child.Model, t.user.ID)
+		if err != nil {
+			return nil, err
+		}
+		if role == "" {
+			continue
+		}
+		root, err := t.baseNavigator.findRoot(ctx, child)
+		if err != nil {
+			return nil, err
+		}
+		root.OwnerModel = child.Model.Edges.Owner
+		if root.OwnerModel == nil {
+			return nil, fmt.Errorf("shared file owner not loaded")
+		}
+		root.Path[pathIndexRoot] = newMyIDUri(hashid.EncodeUserID(t.hasher, child.OwnerID()))
+		root.Path[pathIndexUser] = root.Path[pathIndexRoot]
+		child.CapabilitiesBs = collaborationCapabilities(role)
+		if role == inventory.FileRoleOwner {
+			child.CapabilitiesBs = myNavigatorCapability
+		}
+		visible = append(visible, child)
 	}
+	res.Files = visible
 
 	return res, nil
 }

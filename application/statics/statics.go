@@ -50,7 +50,8 @@ func (b *GinFS) Exists(prefix string, filepath string) bool {
 }
 
 // NewServerStaticFS 初始化静态资源文件
-func NewServerStaticFS(l logging.Logger, statics fs.FS, isPro bool) (static.ServeFileSystem, error) {
+// The final argument is retained for compatibility and no longer selects an edition.
+func NewServerStaticFS(l logging.Logger, statics fs.FS, _ bool) (static.ServeFileSystem, error) {
 	var staticFS static.ServeFileSystem
 	if util.Exists(util.DataPath(StaticFolder)) {
 		l.Info("Folder with %q already exists, it will be used to serve static files.", util.DataPath(StaticFolder))
@@ -72,6 +73,7 @@ func NewServerStaticFS(l logging.Logger, statics fs.FS, isPro bool) (static.Serv
 		l.Warning("Missing version identifier file in static resources, please delete \"statics\" folder and rebuild it.")
 		return staticFS, nil
 	}
+	defer f.Close()
 
 	b, err := io.ReadAll(f)
 	if err != nil {
@@ -85,12 +87,8 @@ func NewServerStaticFS(l logging.Logger, statics fs.FS, isPro bool) (static.Serv
 		return staticFS, nil
 	}
 
-	staticName := "cloudreve-frontend"
-	if isPro {
-		staticName += "-pro"
-	}
-
-	if v.Name != staticName {
+	// Accept resources from either edition; retain the release version check.
+	if v.Name != "cloudreve-frontend" && v.Name != "cloudreve-frontend-pro" {
 		l.Error("Static resource version mismatch, please delete \"statics\" folder and rebuild it.")
 	}
 

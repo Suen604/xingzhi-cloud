@@ -9,6 +9,7 @@ import (
 	"github.com/cloudreve/Cloudreve/v4/ent"
 	"github.com/cloudreve/Cloudreve/v4/ent/entity"
 	"github.com/cloudreve/Cloudreve/v4/ent/file"
+	"github.com/cloudreve/Cloudreve/v4/ent/filepermission"
 	"github.com/cloudreve/Cloudreve/v4/ent/metadata"
 	"github.com/cloudreve/Cloudreve/v4/ent/predicate"
 	"github.com/cloudreve/Cloudreve/v4/inventory/types"
@@ -22,7 +23,9 @@ const (
 
 func (f *fileClient) searchQuery(q *ent.FileQuery, args *SearchFileParameters, parents []*ent.File, ownerId int) *ent.FileQuery {
 	if len(parents) == 1 && parents[0] == nil {
-		q = q.Where(file.OwnerID(ownerId))
+		if ownerId > 0 {
+			q = q.Where(file.OwnerID(ownerId))
+		}
 	} else {
 		q = q.Where(
 			file.HasParentWith(
@@ -117,6 +120,16 @@ func (f *fileClient) searchQuery(q *ent.FileQuery, args *SearchFileParameters, p
 // ChildFileQuery generates query for child file(s) of a given set of root
 func (f *fileClient) childFileQuery(ownerID int, isSymbolic bool, root ...*ent.File) *ent.FileQuery {
 	rawQuery := f.client.File.Query()
+	if isSymbolic {
+		return rawQuery.Where(file.Or(
+			file.And(file.OwnerID(ownerID), file.IsSymbolic(true), file.FileChildrenNotNil()),
+			func(s *sql.Selector) {
+				t := sql.Table(filepermission.Table)
+				s.Where(sql.In(s.C(file.FieldID), sql.Select(t.C(filepermission.FieldFileID)).From(t).
+					Where(sql.EQ(t.C(filepermission.FieldUserID), ownerID))))
+			},
+		))
+	}
 	if len(root) == 1 && root[0] != nil {
 		// Query children of one single root
 		rawQuery = f.client.File.QueryChildren(root[0])

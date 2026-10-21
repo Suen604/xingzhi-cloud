@@ -16,6 +16,8 @@ type Share struct {
 // Fields of the Share.
 func (Share) Fields() []ent.Field {
 	return []ent.Field{
+		// Price is denominated in CNY fen; zero denotes a free share.
+		field.Int64("price").Default(0).NonNegative(),
 		field.String("password").
 			Optional(),
 		field.Int("views").

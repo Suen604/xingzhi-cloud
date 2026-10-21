@@ -70,6 +70,11 @@ func DeletedAt(v time.Time) predicate.Share {
 	return predicate.Share(sql.FieldEQ(FieldDeletedAt, v))
 }
 
+// Price applies equality check predicate on the "price" field. It's identical to PriceEQ.
+func Price(v int64) predicate.Share {
+	return predicate.Share(sql.FieldEQ(FieldPrice, v))
+}
+
 // Password applies equality check predicate on the "password" field. It's identical to PasswordEQ.
 func Password(v string) predicate.Share {
 	return predicate.Share(sql.FieldEQ(FieldPassword, v))
@@ -223,6 +228,46 @@ func DeletedAtIsNil() predicate.Share {
 // DeletedAtNotNil applies the NotNil predicate on the "deleted_at" field.
 func DeletedAtNotNil() predicate.Share {
 	return predicate.Share(sql.FieldNotNull(FieldDeletedAt))
+}
+
+// PriceEQ applies the EQ predicate on the "price" field.
+func PriceEQ(v int64) predicate.Share {
+	return predicate.Share(sql.FieldEQ(FieldPrice, v))
+}
+
+// PriceNEQ applies the NEQ predicate on the "price" field.
+func PriceNEQ(v int64) predicate.Share {
+	return predicate.Share(sql.FieldNEQ(FieldPrice, v))
+}
+
+// PriceIn applies the In predicate on the "price" field.
+func PriceIn(vs ...int64) predicate.Share {
+	return predicate.Share(sql.FieldIn(FieldPrice, vs...))
+}
+
+// PriceNotIn applies the NotIn predicate on the "price" field.
+func PriceNotIn(vs ...int64) predicate.Share {
+	return predicate.Share(sql.FieldNotIn(FieldPrice, vs...))
+}
+
+// PriceGT applies the GT predicate on the "price" field.
+func PriceGT(v int64) predicate.Share {
+	return predicate.Share(sql.FieldGT(FieldPrice, v))
+}
+
+// PriceGTE applies the GTE predicate on the "price" field.
+func PriceGTE(v int64) predicate.Share {
+	return predicate.Share(sql.FieldGTE(FieldPrice, v))
+}
+
+// PriceLT applies the LT predicate on the "price" field.
+func PriceLT(v int64) predicate.Share {
+	return predicate.Share(sql.FieldLT(FieldPrice, v))
+}
+
+// PriceLTE applies the LTE predicate on the "price" field.
+func PriceLTE(v int64) predicate.Share {
+	return predicate.Share(sql.FieldLTE(FieldPrice, v))
 }
 
 // PasswordEQ applies the EQ predicate on the "password" field.

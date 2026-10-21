@@ -275,6 +275,9 @@ var (
 )
 
 func (s *SetSettingService) SetSetting(c *gin.Context) (map[string]string, error) {
+	if _, ok := s.Settings["extensions_config"]; ok {
+		return nil, serializer.NewError(serializer.CodeParamErr, "Use the dedicated extensions configuration endpoint", nil)
+	}
 	dep := dependency.FromContext(c)
 	kv := dep.KV()
 	settingClient := dep.SettingClient()

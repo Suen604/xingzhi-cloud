@@ -27,6 +27,8 @@ type Share struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// DeletedAt holds the value of the "deleted_at" field.
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	// Price holds the value of the "price" field.
+	Price int64 `json:"price,omitempty"`
 	// Password holds the value of the "password" field.
 	Password string `json:"password,omitempty"`
 	// Views holds the value of the "views" field.
@@ -91,7 +93,7 @@ func (*Share) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case share.FieldProps:
 			values[i] = new([]byte)
-		case share.FieldID, share.FieldViews, share.FieldDownloads, share.FieldRemainDownloads:
+		case share.FieldID, share.FieldPrice, share.FieldViews, share.FieldDownloads, share.FieldRemainDownloads:
 			values[i] = new(sql.NullInt64)
 		case share.FieldPassword:
 			values[i] = new(sql.NullString)
@@ -140,6 +142,12 @@ func (s *Share) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				s.DeletedAt = new(time.Time)
 				*s.DeletedAt = value.Time
+			}
+		case share.FieldPrice:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field price", values[i])
+			} else if value.Valid {
+				s.Price = value.Int64
 			}
 		case share.FieldPassword:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -251,6 +259,9 @@ func (s *Share) String() string {
 		builder.WriteString("deleted_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("price=")
+	builder.WriteString(fmt.Sprintf("%v", s.Price))
 	builder.WriteString(", ")
 	builder.WriteString("password=")
 	builder.WriteString(s.Password)

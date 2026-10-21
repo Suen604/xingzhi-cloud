@@ -147,6 +147,27 @@ func (uu *UserUpdate) AddStorage(i int64) *UserUpdate {
 	return uu
 }
 
+// SetExtraStorage sets the "extra_storage" field.
+func (uu *UserUpdate) SetExtraStorage(i int64) *UserUpdate {
+	uu.mutation.ResetExtraStorage()
+	uu.mutation.SetExtraStorage(i)
+	return uu
+}
+
+// SetNillableExtraStorage sets the "extra_storage" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableExtraStorage(i *int64) *UserUpdate {
+	if i != nil {
+		uu.SetExtraStorage(*i)
+	}
+	return uu
+}
+
+// AddExtraStorage adds i to the "extra_storage" field.
+func (uu *UserUpdate) AddExtraStorage(i int64) *UserUpdate {
+	uu.mutation.AddExtraStorage(i)
+	return uu
+}
+
 // SetTwoFactorSecret sets the "two_factor_secret" field.
 func (uu *UserUpdate) SetTwoFactorSecret(s string) *UserUpdate {
 	uu.mutation.SetTwoFactorSecret(s)
@@ -582,6 +603,11 @@ func (uu *UserUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := uu.mutation.ExtraStorage(); ok {
+		if err := user.ExtraStorageValidator(v); err != nil {
+			return &ValidationError{Name: "extra_storage", err: fmt.Errorf(`ent: validator failed for field "User.extra_storage": %w`, err)}
+		}
+	}
 	if _, ok := uu.mutation.GroupID(); uu.mutation.GroupCleared() && !ok {
 		return errors.New(`ent: clearing a required unique edge "User.group"`)
 	}
@@ -629,6 +655,12 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if value, ok := uu.mutation.AddedStorage(); ok {
 		_spec.AddField(user.FieldStorage, field.TypeInt64, value)
+	}
+	if value, ok := uu.mutation.ExtraStorage(); ok {
+		_spec.SetField(user.FieldExtraStorage, field.TypeInt64, value)
+	}
+	if value, ok := uu.mutation.AddedExtraStorage(); ok {
+		_spec.AddField(user.FieldExtraStorage, field.TypeInt64, value)
 	}
 	if value, ok := uu.mutation.TwoFactorSecret(); ok {
 		_spec.SetField(user.FieldTwoFactorSecret, field.TypeString, value)
@@ -1166,6 +1198,27 @@ func (uuo *UserUpdateOne) AddStorage(i int64) *UserUpdateOne {
 	return uuo
 }
 
+// SetExtraStorage sets the "extra_storage" field.
+func (uuo *UserUpdateOne) SetExtraStorage(i int64) *UserUpdateOne {
+	uuo.mutation.ResetExtraStorage()
+	uuo.mutation.SetExtraStorage(i)
+	return uuo
+}
+
+// SetNillableExtraStorage sets the "extra_storage" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableExtraStorage(i *int64) *UserUpdateOne {
+	if i != nil {
+		uuo.SetExtraStorage(*i)
+	}
+	return uuo
+}
+
+// AddExtraStorage adds i to the "extra_storage" field.
+func (uuo *UserUpdateOne) AddExtraStorage(i int64) *UserUpdateOne {
+	uuo.mutation.AddExtraStorage(i)
+	return uuo
+}
+
 // SetTwoFactorSecret sets the "two_factor_secret" field.
 func (uuo *UserUpdateOne) SetTwoFactorSecret(s string) *UserUpdateOne {
 	uuo.mutation.SetTwoFactorSecret(s)
@@ -1614,6 +1667,11 @@ func (uuo *UserUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := uuo.mutation.ExtraStorage(); ok {
+		if err := user.ExtraStorageValidator(v); err != nil {
+			return &ValidationError{Name: "extra_storage", err: fmt.Errorf(`ent: validator failed for field "User.extra_storage": %w`, err)}
+		}
+	}
 	if _, ok := uuo.mutation.GroupID(); uuo.mutation.GroupCleared() && !ok {
 		return errors.New(`ent: clearing a required unique edge "User.group"`)
 	}
@@ -1678,6 +1736,12 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 	}
 	if value, ok := uuo.mutation.AddedStorage(); ok {
 		_spec.AddField(user.FieldStorage, field.TypeInt64, value)
+	}
+	if value, ok := uuo.mutation.ExtraStorage(); ok {
+		_spec.SetField(user.FieldExtraStorage, field.TypeInt64, value)
+	}
+	if value, ok := uuo.mutation.AddedExtraStorage(); ok {
+		_spec.AddField(user.FieldExtraStorage, field.TypeInt64, value)
 	}
 	if value, ok := uuo.mutation.TwoFactorSecret(); ok {
 		_spec.SetField(user.FieldTwoFactorSecret, field.TypeString, value)

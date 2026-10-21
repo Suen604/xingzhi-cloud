@@ -36,6 +36,8 @@ type User struct {
 	Status user.Status `json:"status,omitempty"`
 	// Storage holds the value of the "storage" field.
 	Storage int64 `json:"storage,omitempty"`
+	// ExtraStorage holds the value of the "extra_storage" field.
+	ExtraStorage int64 `json:"extra_storage,omitempty"`
 	// TwoFactorSecret holds the value of the "two_factor_secret" field.
 	TwoFactorSecret string `json:"-"`
 	// Avatar holds the value of the "avatar" field.
@@ -167,7 +169,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldSettings:
 			values[i] = new([]byte)
-		case user.FieldID, user.FieldStorage, user.FieldGroupUsers:
+		case user.FieldID, user.FieldStorage, user.FieldExtraStorage, user.FieldGroupUsers:
 			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldNick, user.FieldPassword, user.FieldStatus, user.FieldTwoFactorSecret, user.FieldAvatar:
 			values[i] = new(sql.NullString)
@@ -242,6 +244,12 @@ func (u *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field storage", values[i])
 			} else if value.Valid {
 				u.Storage = value.Int64
+			}
+		case user.FieldExtraStorage:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field extra_storage", values[i])
+			} else if value.Valid {
+				u.ExtraStorage = value.Int64
 			}
 		case user.FieldTwoFactorSecret:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -374,6 +382,9 @@ func (u *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("storage=")
 	builder.WriteString(fmt.Sprintf("%v", u.Storage))
+	builder.WriteString(", ")
+	builder.WriteString("extra_storage=")
+	builder.WriteString(fmt.Sprintf("%v", u.ExtraStorage))
 	builder.WriteString(", ")
 	builder.WriteString("two_factor_secret=<sensitive>")
 	builder.WriteString(", ")

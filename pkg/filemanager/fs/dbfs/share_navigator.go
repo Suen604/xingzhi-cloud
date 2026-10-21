@@ -19,7 +19,7 @@ import (
 
 var (
 	ErrShareNotFound = serializer.NewError(serializer.CodeNotFound, "Shared file does not exist", nil)
-	ErrNotPurchased  = serializer.NewError(serializer.CodePurchaseRequired, "You need to purchased this share", nil)
+	ErrNotPurchased  = serializer.NewError(serializer.CodePurchaseRequired, "Purchase this share to access its contents", nil)
 )
 
 const (
@@ -130,6 +130,13 @@ func (n *shareNavigator) Root(ctx context.Context, path *fs.URI) (*File, error) 
 	if share.Password != "" && share.Password != path.Password() {
 		return nil, ErrShareIncorrectPassword
 	}
+	allowed, err := inventory.CanAccessPaidShare(ctx, n.shareClient.GetClient(), share, n.user)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, ErrNotPurchased
+	}
 
 	// Share permission setting should overwrite root folder's permission
 	n.shareRoot = newFile(nil, share.Edges.File)
@@ -187,9 +194,15 @@ func (n *shareNavigator) To(ctx context.Context, path *fs.URI) (*File, error) {
 
 		n.shareRoot = root
 	}
+	if err := n.checkAccess(ctx, path); err != nil {
+		return nil, err
+	}
 
 	current, lastAncestor := n.shareRoot, n.shareRoot
 	elements := path.Elements()
+	if n.singleFileShare && len(elements) > 1 {
+		return nil, fs.ErrPathNotExist
+	}
 
 	// If target is root of single file share, the root itself is the target.
 	if len(elements) == 1 && n.singleFileShare {
@@ -218,7 +231,9 @@ func (n *shareNavigator) To(ctx context.Context, path *fs.URI) (*File, error) {
 }
 
 func (n *shareNavigator) walkNext(ctx context.Context, root *File, next string, isLeaf bool) (*File, error) {
-	nextFile, err := n.baseNavigator.walkNext(ctx, root, next, isLeaf)
+	// Resolve every segment against its current parent. Cached ancestors can
+	// have moved out of the shared subtree since the navigator was persisted.
+	nextFile, err := n.baseNavigator.walkNext(ctx, root, next, true)
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +242,9 @@ func (n *shareNavigator) walkNext(ctx context.Context, root *File, next string, 
 }
 
 func (n *shareNavigator) Children(ctx context.Context, parent *File, args *ListArgs) (*ListResult, error) {
+	if err := n.checkAccess(ctx, n.shareRoot.Uri(false)); err != nil {
+		return nil, err
+	}
 	if n.singleFileShare {
 		file, err := n.latestSharedSingleFile(ctx)
 		if err != nil {
@@ -300,6 +318,9 @@ func (n *shareNavigator) FollowTx(ctx context.Context) (func(), error) {
 }
 
 func (n *shareNavigator) ExecuteHook(ctx context.Context, hookType fs.HookType, file *File) error {
+	if err := n.checkAccess(ctx, n.shareRoot.Uri(false)); err != nil {
+		return err
+	}
 	switch hookType {
 	case fs.HookTypeBeforeDownload:
 		return n.shareClient.Downloaded(ctx, n.share)
@@ -308,7 +329,45 @@ func (n *shareNavigator) ExecuteHook(ctx context.Context, hookType fs.HookType, 
 }
 
 func (n *shareNavigator) Walk(ctx context.Context, levelFiles []*File, limit, depth int, f WalkFunc) error {
+	if err := n.checkAccess(ctx, n.shareRoot.Uri(false)); err != nil {
+		return err
+	}
 	return n.baseNavigator.walk(ctx, levelFiles, limit, depth, f)
+}
+
+// Always query live share settings and purchase records, including for restored
+// navigator state. A cached free share must not bypass a newly enabled paywall.
+func (n *shareNavigator) checkAccess(ctx context.Context, path *fs.URI) error {
+	ctx = context.WithValue(ctx, inventory.LoadShareUser{}, true)
+	ctx = context.WithValue(ctx, inventory.LoadShareFile{}, true)
+	current, err := n.shareClient.GetByID(ctx, n.share.ID)
+	if err != nil || inventory.IsValidShare(current) != nil {
+		return ErrShareNotFound
+	}
+	if current.Edges.File.ID != n.share.Edges.File.ID || current.Edges.User.ID != n.share.Edges.User.ID {
+		return ErrShareNotFound
+	}
+	if current.Password != "" && current.Password != path.Password() {
+		return ErrShareIncorrectPassword
+	}
+	allowed, err := inventory.CanAccessPaidShare(ctx, n.shareClient.GetClient(), current, n.user)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrNotPurchased
+	}
+	if n.user.ID != current.Edges.User.ID && !n.user.Edges.Group.Permissions.Enabled(int(types.GroupPermissionShareDownload)) {
+		return ErrPermissionDenied
+	}
+	// Check the live ancestry as well: an old navigator may point into a tree
+	// moved into the recycle bin after it was cached.
+	role, err := inventory.FilePermissionRole(ctx, n.shareClient.GetClient(), current.Edges.File.ID, current.Edges.User.ID)
+	if err != nil || role != inventory.FileRoleOwner {
+		return ErrShareNotFound
+	}
+	n.share = current
+	return nil
 }
 
 func (n *shareNavigator) GetView(ctx context.Context, file *File) *types.ExplorerView {

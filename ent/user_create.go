@@ -128,6 +128,20 @@ func (uc *UserCreate) SetNillableStorage(i *int64) *UserCreate {
 	return uc
 }
 
+// SetExtraStorage sets the "extra_storage" field.
+func (uc *UserCreate) SetExtraStorage(i int64) *UserCreate {
+	uc.mutation.SetExtraStorage(i)
+	return uc
+}
+
+// SetNillableExtraStorage sets the "extra_storage" field if the given value is not nil.
+func (uc *UserCreate) SetNillableExtraStorage(i *int64) *UserCreate {
+	if i != nil {
+		uc.SetExtraStorage(*i)
+	}
+	return uc
+}
+
 // SetTwoFactorSecret sets the "two_factor_secret" field.
 func (uc *UserCreate) SetTwoFactorSecret(s string) *UserCreate {
 	uc.mutation.SetTwoFactorSecret(s)
@@ -358,6 +372,10 @@ func (uc *UserCreate) defaults() error {
 		v := user.DefaultStorage
 		uc.mutation.SetStorage(v)
 	}
+	if _, ok := uc.mutation.ExtraStorage(); !ok {
+		v := user.DefaultExtraStorage
+		uc.mutation.SetExtraStorage(v)
+	}
 	if _, ok := uc.mutation.Settings(); !ok {
 		v := user.DefaultSettings
 		uc.mutation.SetSettings(v)
@@ -399,6 +417,14 @@ func (uc *UserCreate) check() error {
 	}
 	if _, ok := uc.mutation.Storage(); !ok {
 		return &ValidationError{Name: "storage", err: errors.New(`ent: missing required field "User.storage"`)}
+	}
+	if _, ok := uc.mutation.ExtraStorage(); !ok {
+		return &ValidationError{Name: "extra_storage", err: errors.New(`ent: missing required field "User.extra_storage"`)}
+	}
+	if v, ok := uc.mutation.ExtraStorage(); ok {
+		if err := user.ExtraStorageValidator(v); err != nil {
+			return &ValidationError{Name: "extra_storage", err: fmt.Errorf(`ent: validator failed for field "User.extra_storage": %w`, err)}
+		}
 	}
 	if _, ok := uc.mutation.GroupUsers(); !ok {
 		return &ValidationError{Name: "group_users", err: errors.New(`ent: missing required field "User.group_users"`)}
@@ -471,6 +497,10 @@ func (uc *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := uc.mutation.Storage(); ok {
 		_spec.SetField(user.FieldStorage, field.TypeInt64, value)
 		_node.Storage = value
+	}
+	if value, ok := uc.mutation.ExtraStorage(); ok {
+		_spec.SetField(user.FieldExtraStorage, field.TypeInt64, value)
+		_node.ExtraStorage = value
 	}
 	if value, ok := uc.mutation.TwoFactorSecret(); ok {
 		_spec.SetField(user.FieldTwoFactorSecret, field.TypeString, value)
@@ -783,6 +813,24 @@ func (u *UserUpsert) AddStorage(v int64) *UserUpsert {
 	return u
 }
 
+// SetExtraStorage sets the "extra_storage" field.
+func (u *UserUpsert) SetExtraStorage(v int64) *UserUpsert {
+	u.Set(user.FieldExtraStorage, v)
+	return u
+}
+
+// UpdateExtraStorage sets the "extra_storage" field to the value that was provided on create.
+func (u *UserUpsert) UpdateExtraStorage() *UserUpsert {
+	u.SetExcluded(user.FieldExtraStorage)
+	return u
+}
+
+// AddExtraStorage adds v to the "extra_storage" field.
+func (u *UserUpsert) AddExtraStorage(v int64) *UserUpsert {
+	u.Add(user.FieldExtraStorage, v)
+	return u
+}
+
 // SetTwoFactorSecret sets the "two_factor_secret" field.
 func (u *UserUpsert) SetTwoFactorSecret(v string) *UserUpsert {
 	u.Set(user.FieldTwoFactorSecret, v)
@@ -1010,6 +1058,27 @@ func (u *UserUpsertOne) AddStorage(v int64) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateStorage() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateStorage()
+	})
+}
+
+// SetExtraStorage sets the "extra_storage" field.
+func (u *UserUpsertOne) SetExtraStorage(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetExtraStorage(v)
+	})
+}
+
+// AddExtraStorage adds v to the "extra_storage" field.
+func (u *UserUpsertOne) AddExtraStorage(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddExtraStorage(v)
+	})
+}
+
+// UpdateExtraStorage sets the "extra_storage" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateExtraStorage() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateExtraStorage()
 	})
 }
 
@@ -1422,6 +1491,27 @@ func (u *UserUpsertBulk) AddStorage(v int64) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateStorage() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateStorage()
+	})
+}
+
+// SetExtraStorage sets the "extra_storage" field.
+func (u *UserUpsertBulk) SetExtraStorage(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetExtraStorage(v)
+	})
+}
+
+// AddExtraStorage adds v to the "extra_storage" field.
+func (u *UserUpsertBulk) AddExtraStorage(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddExtraStorage(v)
+	})
+}
+
+// UpdateExtraStorage sets the "extra_storage" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateExtraStorage() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateExtraStorage()
 	})
 }
 

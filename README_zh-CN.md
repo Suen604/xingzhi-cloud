@@ -63,6 +63,8 @@
 
 你可以参考 [构建](https://docs.cloudreve.org/overview/build/) 从源代码构建 Cloudreve。
 
+此分支统一向客户端返回 Pro 标记，无需许可证密钥，并兼容同版本的社区版和 Pro 前端资源包。新增功能、第三方平台配置和仍待实现的入口见 [功能实现说明](docs/FEATURES.md)。前端修改以 `.build/assets-features.patch` 保存在主仓库，构建脚本会自动应用。
+
 ## :rocket: 贡献
 
 如果你有兴趣为 Cloudreve 贡献代码，请参考 [贡献](https://docs.cloudreve.org/api/contributing/) 了解如何贡献。

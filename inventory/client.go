@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/cloudreve/Cloudreve/v4/ent"
 	_ "github.com/cloudreve/Cloudreve/v4/ent/runtime"
+	"github.com/cloudreve/Cloudreve/v4/ent/setting"
 	"github.com/cloudreve/Cloudreve/v4/inventory/debug"
 	"github.com/cloudreve/Cloudreve/v4/pkg/cache"
 	"github.com/cloudreve/Cloudreve/v4/pkg/conf"
@@ -37,7 +38,19 @@ func InitializeDBClient(l logging.Logger,
 			return nil, fmt.Errorf("failed to migrate database: %w", err)
 		}
 	} else {
+		// Also update extension tables on an installation with the same upstream
+		// version marker. Schema.Create is additive and idempotent.
+		if err := client.Schema.Create(ctx); err != nil {
+			return nil, fmt.Errorf("failed to update extension schema: %w", err)
+		}
 		l.Info("Database schema is up to date.")
+	}
+	// These editors can be used on an existing installation without changing the
+	// upstream version marker. Do not overwrite an administrator's templates.
+	for _, key := range []string{"mail_receipt_template", "mail_exceed_quota_template"} {
+		if err := client.Setting.Create().SetName(key).SetValue("[]").OnConflictColumns(setting.FieldName).Ignore().Exec(ctx); err != nil {
+			return nil, fmt.Errorf("failed to initialize extension template: %w", err)
+		}
 	}
 
 	//createMockData(client, ctx)

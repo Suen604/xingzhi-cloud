@@ -10,6 +10,7 @@ import (
 	"github.com/cloudreve/Cloudreve/v4/ent/directlink"
 	"github.com/cloudreve/Cloudreve/v4/ent/entity"
 	"github.com/cloudreve/Cloudreve/v4/ent/file"
+	"github.com/cloudreve/Cloudreve/v4/ent/filepermission"
 	"github.com/cloudreve/Cloudreve/v4/ent/metadata"
 	"github.com/cloudreve/Cloudreve/v4/ent/predicate"
 	"github.com/cloudreve/Cloudreve/v4/ent/schema"
@@ -149,6 +150,8 @@ type (
 
 type FileClient interface {
 	TxOperator
+	// PermissionRole resolves live, inherited collaboration grants.
+	PermissionRole(ctx context.Context, target *ent.File, uid int) (string, error)
 	// GetByHashID returns a file by its hashID.
 	GetByHashID(ctx context.Context, hashID string) (*ent.File, error)
 	// GetParentFile returns the parent folder of a given file
@@ -583,6 +586,9 @@ func (f *fileClient) Delete(ctx context.Context, files []*ent.File, options *typ
 	)
 
 	for i, group := range fileGroups {
+		if _, err := f.client.FilePermission.Delete().Where(filepermission.FileIDIn(chunks[i]...)).Exec(ctx); err != nil {
+			return nil, nil, fmt.Errorf("failed to delete collaboration grants: %w", err)
+		}
 		// 4. Delete shares/metadata/directlinks if needed;
 		if _, err := f.client.Share.Delete().Where(share.HasFileWith(group)).Exec(ctx); err != nil {
 			return nil, nil, fmt.Errorf("failed to delete shares of files %v: %w", group, err)
@@ -1027,7 +1033,13 @@ func (f *fileClient) GetChildFiles(ctx context.Context, args *ListFileParameters
 	rawQuery := f.childFileQuery(ownerID, args.SharedWithMe, roots...)
 	query := withFileEagerLoading(ctx, rawQuery)
 	if args.Search != nil {
-		query = f.searchQuery(query, args.Search, roots, ownerID)
+		searchOwner := ownerID
+		if args.SharedWithMe {
+			// The grant subquery already restricts recipients; these files belong
+			// to other users and must not be filtered by the recipient's owner ID.
+			searchOwner = 0
+		}
+		query = f.searchQuery(query, args.Search, roots, searchOwner)
 	}
 
 	var (

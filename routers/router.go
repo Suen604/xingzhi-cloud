@@ -18,6 +18,7 @@ import (
 	adminsvc "github.com/cloudreve/Cloudreve/v4/service/admin"
 	"github.com/cloudreve/Cloudreve/v4/service/basic"
 	"github.com/cloudreve/Cloudreve/v4/service/explorer"
+	"github.com/cloudreve/Cloudreve/v4/service/extended"
 	"github.com/cloudreve/Cloudreve/v4/service/node"
 	"github.com/cloudreve/Cloudreve/v4/service/oauth"
 	"github.com/cloudreve/Cloudreve/v4/service/setting"
@@ -236,6 +237,12 @@ func initMasterRouter(dep dependency.Dep) *gin.Engine {
 
 	// 禁止缓存
 	v4.Use(middleware.CacheControl()) // Done
+	v4.Use(extended.Audit())
+	v4.GET("extensions/public", extended.PublicConfig)
+	v4.POST("sso/:provider/start", extended.SSOStart)
+	v4.GET("sso/:provider/callback", extended.SSOCallback)
+	v4.POST("sso/complete", extended.SSOComplete)
+	v4.POST("payments/:provider/notify", extended.PaymentNotify)
 
 	/*
 		路由
@@ -872,10 +879,30 @@ func initMasterRouter(dep dependency.Dep) *gin.Engine {
 		// 需要登录保护的
 		auth := v4.Group("")
 		auth.Use(middleware.LoginRequired())
+		auth.GET("file/permissions", middleware.RequiredScopes(types.ScopeFilesRead), extended.FilePermissions)
+		auth.PUT("file/permissions", middleware.RequiredScopes(types.ScopeFilesRead, types.ScopeFilesWrite), extended.FilePermissions)
+		auth.DELETE("file/permissions", middleware.RequiredScopes(types.ScopeFilesRead, types.ScopeFilesWrite), extended.FilePermissions)
+		auth.GET("storage/policies", middleware.RequiredScopes(types.ScopeUserInfoRead), extended.UserStoragePolicies)
+		auth.PATCH("storage/policies", middleware.RequiredScopes(types.ScopeUserInfoWrite), extended.UserStoragePolicies)
+		auth.POST("commerce/orders", middleware.RequiredScopes(types.ScopeUserInfoWrite), extended.CreateOrder)
+		auth.POST("commerce/share-orders", middleware.RequiredScopes(types.ScopeFilesRead, types.ScopeUserInfoWrite), extended.CreateShareOrder)
+		auth.GET("commerce/orders/:number", middleware.RequiredScopes(types.ScopeUserInfoRead), extended.GetOrder)
+		auth.GET("commerce/share-sales", middleware.RequiredScopes(types.ScopeFilesRead, types.ScopeUserInfoRead), extended.ShareSales)
+		auth.GET("commerce/orders", middleware.RequiredScopes(types.ScopeUserInfoRead), extended.ListOrders)
+		auth.POST("commerce/redeem", middleware.RequiredScopes(types.ScopeUserInfoWrite), extended.Redeem)
+		auth.POST("abuse", middleware.RequiredScopes(types.ScopeUserInfoWrite), extended.ReportAbuse)
 		{
 			// 管理
 			admin := auth.Group("admin", middleware.IsAdmin())
 			admin.Use(middleware.RequiredScopes(types.ScopeAdminRead))
+			admin.GET("extensions/config", extended.AdminConfig)
+			admin.PUT("extensions/config", middleware.RequiredScopes(types.ScopeAdminWrite), extended.AdminConfig)
+			admin.GET("extensions/audit", extended.ListAudit)
+			admin.GET("extensions/orders", extended.AdminListOrders)
+			admin.GET("extensions/giftcodes", extended.AdminGiftCodes)
+			admin.POST("extensions/giftcodes", middleware.RequiredScopes(types.ScopeAdminWrite), extended.AdminGiftCodes)
+			admin.GET("extensions/reports", extended.ListReports)
+			admin.PATCH("extensions/reports/:id", middleware.RequiredScopes(types.ScopeAdminWrite), extended.ResolveReport)
 			{
 				admin.GET("summary",
 					controllers.FromQuery[adminsvc.SummaryService](adminsvc.SummaryParamCtx{}),

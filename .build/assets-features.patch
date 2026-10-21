@@ -1,0 +1,3009 @@
+diff --git a/package.json b/package.json
+index 79bff79..865c9e1 100644
+--- a/package.json
++++ b/package.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "cloudreve-frontend",
+   "private": true,
+-  "version": "4.0.0-next",
++  "version": "4.14.0",
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+diff --git a/public/locales/en-US/application.json b/public/locales/en-US/application.json
+index a4ba147..54c5781 100644
+--- a/public/locales/en-US/application.json
++++ b/public/locales/en-US/application.json
+@@ -86,6 +86,7 @@
+     }
+   },
+   "navbar": {
++    "shop": "Shop and storage",
+     "notBefore": "Not before",
+     "notAfter": "Not after",
+     "minimum": "Minimum",
+diff --git a/public/locales/zh-CN/application.json b/public/locales/zh-CN/application.json
+index 9264f67..ac4ea03 100644
+--- a/public/locales/zh-CN/application.json
++++ b/public/locales/zh-CN/application.json
+@@ -86,6 +86,7 @@
+     }
+   },
+   "navbar": {
++    "shop": "商店与存储",
+     "notBefore": "不早于",
+     "notAfter": "不晚于",
+     "minimum": "最小",
+diff --git a/public/locales/zh-TW/application.json b/public/locales/zh-TW/application.json
+index ccd2bdd..4a52c3c 100644
+--- a/public/locales/zh-TW/application.json
++++ b/public/locales/zh-TW/application.json
+@@ -86,6 +86,7 @@
+     }
+   },
+   "navbar": {
++    "shop": "商店與儲存",
+     "notBefore": "不早於",
+     "notAfter": "不晚於",
+     "minimum": "最小",
+diff --git a/src/api/dashboard.ts b/src/api/dashboard.ts
+index e90303e..5bfcce7 100644
+--- a/src/api/dashboard.ts
++++ b/src/api/dashboard.ts
+@@ -53,6 +53,8 @@ export interface GroupEnt extends CommonMixin {
+ }
+ 
+ export interface GroupSetting {
++  allowed_policies?: number[];
++  default_pinned?: { uri: string; name?: string }[];
+   compress_size?: number;
+   decompress_size?: number;
+   remote_download_options?: Record<string, any>;
+@@ -212,6 +214,7 @@ export enum NodeStatus {
+ }
+ 
+ export interface PolicySetting {
++  balanced_policies?: number[];
+   token?: string;
+   file_type?: string[];
+   is_file_type_deny_list?: boolean;
+@@ -545,6 +548,7 @@ export interface ListTaskResponse {
+ }
+ 
+ export interface Share extends CommonMixin {
++  price?: number;
+   password?: string;
+   views?: number;
+   downloads?: number;
+diff --git a/src/api/explorer.ts b/src/api/explorer.ts
+index af6093e..edf8f83 100644
+--- a/src/api/explorer.ts
++++ b/src/api/explorer.ts
+@@ -72,6 +72,8 @@ export interface Entity {
+ }
+ 
+ export interface Share {
++  price: number;
++  purchased: boolean;
+   id: string;
+   name?: string;
+   expires?: string;
+@@ -301,6 +303,7 @@ export interface PatchMetadataService extends MultipleUriService {
+ }
+ 
+ export interface ShareCreateService {
++  price?: number;
+   uri: string;
+   downloads?: number;
+   is_private?: boolean;
+diff --git a/src/api/request.ts b/src/api/request.ts
+index bbb91d9..8f930ab 100644
+--- a/src/api/request.ts
++++ b/src/api/request.ts
+@@ -135,6 +135,7 @@ export const Code = {
+   Continue: 203,
+   CredentialInvalid: 40020,
+   IncorrectPassword: 40069,
++  PurchaseRequired: 40083,
+   LockConflict: 40073,
+   StaleVersion: 40076,
+   BatchOperationNotFullyCompleted: 40081,
+diff --git a/src/component/Admin/Common/ProDialog.tsx b/src/component/Admin/Common/ProDialog.tsx
+index f9333ec..dbea661 100644
+--- a/src/component/Admin/Common/ProDialog.tsx
++++ b/src/component/Admin/Common/ProDialog.tsx
+@@ -1,141 +1,30 @@
+-import {
+-  Alert,
+-  AlertTitle,
+-  Button,
+-  DialogContent,
+-  List,
+-  ListItem,
+-  ListItemIcon,
+-  ListItemText,
+-  Typography,
+-  styled,
+-} from "@mui/material";
+-import dayjs from "dayjs";
+-import { useCallback, useMemo } from "react";
+-import { Trans, useTranslation } from "react-i18next";
++import { Button, DialogContent, Typography } from "@mui/material";
++import { useTranslation } from "react-i18next";
+ import DraggableDialog, { StyledDialogActions } from "../../Dialogs/DraggableDialog";
+-import CheckmarkCircleFilled from "../../Icons/CheckmarkCircleFilled";
+-import Gift from "../../Icons/Gift";
+-import { Code } from "../../Common/Code.tsx";
+-
+ export interface ProDialogProps {
+   open: boolean;
+   onClose: () => void;
+ }
+-
+-const features = [
+-  "shareLinkCollabration",
+-  "filePermission",
+-  "multipleStoragePolicy",
+-  "auditAndActivity",
+-  "vasService",
+-  "sso",
+-  "more",
+-];
+-
+-const StyledButton = styled(Button)(({ theme }) => ({
+-  background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
+-  color: theme.palette.primary.contrastText,
+-  "&:hover": {
+-    background: `linear-gradient(45deg, ${theme.palette.primary.dark} 30%, ${theme.palette.primary.main} 90%)`,
+-  },
+-  transition: "all 300ms cubic-bezier(0.4, 0, 0.2, 1) !important",
+-}));
+-
+-// TODO: fetch from cloudreve.org
+-const currentPromotion = {
+-  code: "LX8YL9QP0",
+-  discount: 15,
+-  start: "2026-03-14T02:00:00Z",
+-  end: "2026-06-14T02:00:00Z",
+-};
+-
+-const ProDialog = ({ open, onClose }: ProDialogProps) => {
+-  const { t } = useTranslation("dashboard");
+-  const openMore = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+-    e.stopPropagation();
+-    window.open("https://cloudreve.org/pro", "_blank");
+-  }, []);
+-  const showPromotion = useMemo(() => {
+-    const now = dayjs();
+-    return now >= dayjs(currentPromotion.start) && now <= dayjs(currentPromotion.end);
+-  }, []);
++// Compatibility component for entry points whose implementations are still absent.
++// No purchase or license unlocks these stubs.
++export default function ProDialog({ open, onClose }: ProDialogProps) {
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
+   return (
+     <DraggableDialog
+-      title={t("pro.title")}
+-      dialogProps={{
+-        open,
+-        onClose,
+-        maxWidth: "sm",
+-        fullWidth: true,
+-      }}
++      title={zh ? "功能尚未实现" : "Feature not implemented"}
++      dialogProps={{ open, onClose, maxWidth: "sm", fullWidth: true }}
+     >
+       <DialogContent>
+-        <Typography variant="body1" color="text.secondary">
+-          {t("pro.description")}
++        <Typography>
++          {zh
++            ? "当前源码尚未包含此功能的实际实现。此入口已保留，无需购买或许可证。"
++            : "This source tree does not yet implement this feature. The entry remains available; no purchase or license is required."}
+         </Typography>
+-
+-        <Typography variant="body1" fontWeight={600} sx={{ mt: 2 }}>
+-          {t("pro.proInclude")}
+-        </Typography>
+-
+-        <List dense>
+-          {features.map((feature) => (
+-            <ListItem key={feature}>
+-              <ListItemIcon
+-                sx={{
+-                  minWidth: "36px",
+-                }}
+-              >
+-                <CheckmarkCircleFilled color="primary" />
+-              </ListItemIcon>
+-              <ListItemText
+-                slotProps={{
+-                  primary: {
+-                    sx: {},
+-                    variant: "body1",
+-                  },
+-                }}
+-              >
+-                {t(`pro.${feature}`)}
+-              </ListItemText>
+-            </ListItem>
+-          ))}
+-        </List>
+-        {showPromotion && (
+-          <Alert
+-            iconMapping={{
+-              info: <Gift fontSize="inherit" />,
+-            }}
+-            severity="info"
+-            sx={{ mt: 2 }}
+-          >
+-            <AlertTitle>{t("pro.promotionTitle")}</AlertTitle>
+-            <Trans
+-              i18nKey="dashboard:pro.promotion"
+-              values={{
+-                code: currentPromotion.code,
+-                discount: currentPromotion.discount,
+-              }}
+-              components={[<Code />, <Typography component={"span"} fontWeight={600} />]}
+-            />
+-          </Alert>
+-        )}
+       </DialogContent>
+-      <StyledDialogActions
+-        sx={{
+-          justifyContent: "flex-end",
+-        }}
+-      >
+-        <Button variant="outlined" color="primary" onClick={onClose}>
+-          {t("pro.later")}
+-        </Button>
+-        <StyledButton onClick={openMore} variant="contained" color="primary">
+-          {t("pro.learnMore")}
+-        </StyledButton>
++      <StyledDialogActions>
++        <Button onClick={onClose}>{zh ? "关闭" : "Close"}</Button>
+       </StyledDialogActions>
+     </DraggableDialog>
+   );
+-};
+-
+-export default ProDialog;
++}
+diff --git a/src/component/Admin/FileSystem/CustomProps/CustomPropsSetting.tsx b/src/component/Admin/FileSystem/CustomProps/CustomPropsSetting.tsx
+index 4320e09..41de137 100644
+--- a/src/component/Admin/FileSystem/CustomProps/CustomPropsSetting.tsx
++++ b/src/component/Admin/FileSystem/CustomProps/CustomPropsSetting.tsx
+@@ -117,7 +117,6 @@ const CustomPropsSetting = () => {
+   return (
+     <Box component={"form"} ref={formRef} onSubmit={(e) => e.preventDefault()}>
+       <Stack spacing={1}>
+-        <ProDialog open={proOpen} onClose={() => setProOpen(false)} />
+         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+           <SecondaryButton variant="contained" startIcon={<Add />} {...bindTrigger(newPropsPopupState)}>
+             {t("customProps.add")}
+@@ -138,12 +137,11 @@ const CustomPropsSetting = () => {
+               const fieldType = FieldTypes[type];
+               const Icon = fieldType.icon;
+               return (
+-                <SquareMenuItem dense key={index} onClick={() => (fieldType.pro ? setProOpen(true) : onNewProp(type))}>
++                <SquareMenuItem dense key={index} onClick={() => onNewProp(type)}>
+                   <ListItemIcon>
+                     <Icon />
+                   </ListItemIcon>
+                   {t(fieldType.title)}
+-                  {fieldType.pro && <ProChip label="Pro" color="primary" size="small" />}
+                 </SquareMenuItem>
+               );
+             })}
+diff --git a/src/component/Admin/FileSystem/CustomProps/DraggableCustomPropsRow.tsx b/src/component/Admin/FileSystem/CustomProps/DraggableCustomPropsRow.tsx
+index ec67324..badfa6f 100644
+--- a/src/component/Admin/FileSystem/CustomProps/DraggableCustomPropsRow.tsx
++++ b/src/component/Admin/FileSystem/CustomProps/DraggableCustomPropsRow.tsx
+@@ -45,7 +45,6 @@ export interface FieldTypeProps {
+   maxDes?: string;
+   maxRequired?: boolean;
+   showOptions?: boolean;
+-  pro?: boolean;
+ }
+ 
+ export const FieldTypes: Record<CustomPropsType, FieldTypeProps> = {
+@@ -82,7 +81,6 @@ export const FieldTypes: Record<CustomPropsType, FieldTypeProps> = {
+   [CustomPropsType.user]: {
+     title: "customProps.user",
+     icon: PersonOutlined,
+-    pro: true,
+   },
+   [CustomPropsType.link]: {
+     title: "customProps.link",
+diff --git a/src/component/Admin/Group/EditGroup/BasicInfoSection.tsx b/src/component/Admin/Group/EditGroup/BasicInfoSection.tsx
+index e760653..86edaf6 100644
+--- a/src/component/Admin/Group/EditGroup/BasicInfoSection.tsx
++++ b/src/component/Admin/Group/EditGroup/BasicInfoSection.tsx
+@@ -1,3 +1,4 @@
++import AllowedPolicySelection from "./AllowedPolicySelection";
+ import { Alert, FormControl, FormControlLabel, Switch, Typography } from "@mui/material";
+ import { useCallback, useContext, useMemo } from "react";
+ import { useTranslation } from "react-i18next";
+@@ -81,9 +82,12 @@ const BasicInfoSection = () => {
+             <SettingForm title={t("group.availablePolicies")} lgWidth={5}>
+               <PolicySelectionInput value={values.edges.storage_policies?.id ?? 0} onChange={onPolicyChange} />
+               <NoMarginHelperText>{t("group.availablePoliciesDes")}</NoMarginHelperText>
+-              <NoMarginHelperText>
+-                <ProChip size="small" label="Pro" sx={{ ml: 0 }} /> {t("group.availablePolicyDesPro")}
+-              </NoMarginHelperText>
++              <AllowedPolicySelection
++                value={values.settings?.allowed_policies ?? []}
++                onChange={(ids) =>
++                  setGroup((prev) => ({ ...prev, settings: { ...prev.settings, allowed_policies: ids } }))
++                }
++              />
+             </SettingForm>
+             <SettingForm title={t("group.initialStorageQuota")} lgWidth={5}>
+               <FormControl fullWidth>
+diff --git a/src/component/Admin/Group/EditGroup/DefaultPinnedSection.tsx b/src/component/Admin/Group/EditGroup/DefaultPinnedSection.tsx
+index b848f8e..2fe3980 100644
+--- a/src/component/Admin/Group/EditGroup/DefaultPinnedSection.tsx
++++ b/src/component/Admin/Group/EditGroup/DefaultPinnedSection.tsx
+@@ -1,4 +1,4 @@
+-import { FormControl, Link, Typography } from "@mui/material";
++import { FormControl, Link, Typography, TextField } from "@mui/material";
+ import { useContext } from "react";
+ import { Trans, useTranslation } from "react-i18next";
+ import { Link as RouterLink } from "react-router-dom";
+@@ -10,7 +10,7 @@ import { GroupSettingContext } from "./GroupSettingWrapper";
+ 
+ const DefaultPinnedSection = () => {
+   const { t } = useTranslation("dashboard");
+-  const { values } = useContext(GroupSettingContext);
++  const { values, setGroup } = useContext(GroupSettingContext);
+ 
+   if (values?.id == AnonymousGroupID) {
+     return null;
+@@ -19,12 +19,29 @@ const DefaultPinnedSection = () => {
+   return (
+     <SettingSection>
+       <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-        {t("group.defaultPinned")} <ProChip label="Pro" color="primary" size="small" />
++        {t("group.defaultPinned")}
+       </Typography>
+       <SettingSectionContent>
+-        <SettingForm lgWidth={5} pro>
++        <SettingForm lgWidth={5}>
+           <FormControl fullWidth>
+-            <SharesInput />
++            <TextField
++              multiline
++              minRows={3}
++              label="cloudreve://share/…"
++              value={(values.settings?.default_pinned ?? []).map((p) => p.uri).join("\n")}
++              onChange={(e) =>
++                setGroup((prev) => ({
++                  ...prev,
++                  settings: {
++                    ...prev.settings,
++                    default_pinned: e.target.value
++                      .split("\n")
++                      .filter(Boolean)
++                      .map((uri) => ({ uri })),
++                  },
++                }))
++              }
++            />
+             <NoMarginHelperText>
+               <Trans
+                 i18nKey="group.defaultPinnedDes"
+diff --git a/src/component/Admin/Settings/Email/EmailTemplates.tsx b/src/component/Admin/Settings/Email/EmailTemplates.tsx
+index b05f75e..2772918 100644
+--- a/src/component/Admin/Settings/Email/EmailTemplates.tsx
++++ b/src/component/Admin/Settings/Email/EmailTemplates.tsx
+@@ -130,25 +130,15 @@ const EmailTemplates: React.FC = () => {
+ 
+   return (
+     <SettingSection>
+-      <ProDialog open={proOpen} onClose={() => setProOpen(false)} />
+       <Typography variant="h6" gutterBottom>
+         {t("settings.emailTemplates")}
+       </Typography>
+       <SettingSectionContent>
+         <Box>
+           {templateSettings.map((template) => (
+-            <StyledAccordion
+-              disableGutters
+-              onClick={template.pro ? handleProClick : undefined}
+-              key={template.key}
+-              expanded={template.pro ? false : undefined}
+-              TransitionProps={{ unmountOnExit: true }}
+-            >
++            <StyledAccordion disableGutters key={template.key} TransitionProps={{ unmountOnExit: true }}>
+               <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+-                <Typography>
+-                  {t("settings." + template.title)}
+-                  {template.pro && <ProChip label="Pro" color="primary" size="small" />}
+-                </Typography>
++                <Typography>{t("settings." + template.title)}</Typography>
+               </AccordionSummary>
+               <AccordionDetails sx={{ display: "block" }}>
+                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+diff --git a/src/component/Admin/Settings/Event/Events.tsx b/src/component/Admin/Settings/Event/Events.tsx
+index 5326c6d..fcfc1cf 100644
+--- a/src/component/Admin/Settings/Event/Events.tsx
++++ b/src/component/Admin/Settings/Event/Events.tsx
+@@ -1,3 +1,4 @@
++import ExtensionSettings from "../../Common/ExtensionSettings";
+ import {
+   Box,
+   Checkbox,
+@@ -128,75 +129,6 @@ export const getEventName = (eventType: number): string => {
+   return Object.entries(AuditLogType).find(([_, value]) => value === eventType)?.[0] || `event_${eventType}`;
+ };
+ 
+-const Events = () => {
+-  const { t } = useTranslation("dashboard");
+-  const { formRef, setSettings, values } = useContext(SettingContext);
+-  const [proOpen, setProOpen] = useState(false);
+-
+-  const handleProClick = (e: React.MouseEvent<HTMLDivElement>) => {
+-    e.preventDefault();
+-    setProOpen(true);
+-  };
+-
+-  return (
+-    <Box component={"form"} ref={formRef} onSubmit={(e) => e.preventDefault()}>
+-      <ProDialog open={proOpen} onClose={() => setProOpen(false)} />
+-      <Stack spacing={5}>
+-        <SettingSection>
+-          <Typography variant="h6" sx={{ display: "flex", alignItems: "center" }}>
+-            {t("settings.auditLog")} <ProChip label="Pro" color="primary" size="small" />
+-          </Typography>
+-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+-            {t("settings.auditLogDes")}
+-          </Typography>
+-
+-          {Object.entries(eventCategories).map(([categoryKey, category]) => (
+-            <SettingSection key={categoryKey} onClick={handleProClick}>
+-              <Box>
+-                <Typography variant="subtitle1">{t(category.title)}</Typography>
+-                <Typography variant="body2" color="text.secondary">
+-                  {t(category.description)}
+-                </Typography>
+-              </Box>
+-
+-              <SettingSectionContent>
+-                <FormControl component="fieldset">
+-                  <FormGroup>
+-                    <FormControlLabel
+-                      slotProps={{
+-                        typography: {
+-                          variant: "body2",
+-                        },
+-                      }}
+-                      control={<Checkbox size={"small"} checked={false} />}
+-                      label={t("settings.toggleAll")}
+-                    />
+-                    <NoMarginHelperText>{t("settings.toggleAllDes")}</NoMarginHelperText>
+-                  </FormGroup>
+-                </FormControl>
+-                <Grid container spacing={1}>
+-                  {category.events.map((eventType) => (
+-                    <Grid item xs={12} sm={6} md={4} lg={3} key={eventType}>
+-                      <FormControlLabel
+-                        slotProps={{
+-                          typography: {
+-                            variant: "body2",
+-                          },
+-                        }}
+-                        control={<Checkbox size={"small"} checked={false} />}
+-                        label={t(`settings.event.${getEventName(eventType)}`, getEventName(eventType))}
+-                      />
+-                    </Grid>
+-                  ))}
+-                </Grid>
+-              </SettingSectionContent>
+-              <Divider sx={{ mt: 1 }} />
+-            </SettingSection>
+-          ))}
+-        </SettingSection>
+-      </Stack>
+-    </Box>
+-  );
+-};
++const Events = () => <ExtensionSettings section="audit" />;
+ 
+ export default Events;
+diff --git a/src/component/Admin/Settings/Settings.tsx b/src/component/Admin/Settings/Settings.tsx
+index e95bfb5..6bfd27b 100644
+--- a/src/component/Admin/Settings/Settings.tsx
++++ b/src/component/Admin/Settings/Settings.tsx
+@@ -294,6 +294,8 @@ const Settings = () => {
+                     "fromName",
+                     "mail_activation_template",
+                     "mail_reset_template",
++                    "mail_receipt_template",
++                    "mail_exceed_quota_template",
+                   ]}
+                 >
+                   <Email />
+diff --git a/src/component/Admin/Settings/UserSession/SSOSettings.tsx b/src/component/Admin/Settings/UserSession/SSOSettings.tsx
+index 4492f18..0d4d868 100644
+--- a/src/component/Admin/Settings/UserSession/SSOSettings.tsx
++++ b/src/component/Admin/Settings/UserSession/SSOSettings.tsx
+@@ -1,10 +1,9 @@
+ import { ExpandMoreRounded } from "@mui/icons-material";
+ import { Accordion, AccordionDetails, FormControlLabel, styled } from "@mui/material";
+ import MuiAccordionSummary, { AccordionSummaryProps } from "@mui/material/AccordionSummary";
+-import { useCallback, useState } from "react";
+ import { useTranslation } from "react-i18next";
+ import { StyledCheckbox } from "../../../Common/StyledComponents.tsx";
+-import ProDialog from "../../Common/ProDialog.tsx";
++import ExtensionSettings from "../../Common/ExtensionSettings";
+ 
+ export const AccordionSummary = styled((props: AccordionSummaryProps) => <MuiAccordionSummary {...props} />)(
+   ({ theme }) => ({
+@@ -29,38 +28,6 @@ export const StyledAccordion = styled(Accordion)(({ theme }) => ({
+ 
+ export interface SettingSectionProps {}
+ 
+-const SSOSettings = () => {
+-  const [open, setOpen] = useState(false);
+-  const { t } = useTranslation("dashboard");
+-  const onClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+-    event.stopPropagation();
+-    setOpen(true);
+-  }, []);
+-  return (
+-    <>
+-      <ProDialog open={open} onClose={() => setOpen(false)} />
+-      <div onClick={onClick}>
+-        <StyledAccordion expanded={false} disableGutters>
+-          <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+-            <FormControlLabel control={<StyledCheckbox size={"small"} checked={false} />} label={t("vas.qqConnect")} />
+-          </AccordionSummary>
+-          <AccordionDetails sx={{ display: "block" }}></AccordionDetails>
+-        </StyledAccordion>
+-        <StyledAccordion expanded={false} disableGutters>
+-          <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+-            <FormControlLabel control={<StyledCheckbox size={"small"} checked={false} />} label={t("settings.logto")} />
+-          </AccordionSummary>
+-          <AccordionDetails sx={{ display: "block" }}></AccordionDetails>
+-        </StyledAccordion>
+-        <StyledAccordion expanded={false} disableGutters>
+-          <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+-            <FormControlLabel control={<StyledCheckbox size={"small"} checked={false} />} label={t("settings.oidc")} />
+-          </AccordionSummary>
+-          <AccordionDetails sx={{ display: "block" }}></AccordionDetails>
+-        </StyledAccordion>
+-      </div>
+-    </>
+-  );
+-};
++const SSOSettings = () => <ExtensionSettings section="sso" />;
+ 
+ export default SSOSettings;
+diff --git a/src/component/Admin/Settings/UserSession/UserSession.tsx b/src/component/Admin/Settings/UserSession/UserSession.tsx
+index bb264cc..a2d3a8d 100644
+--- a/src/component/Admin/Settings/UserSession/UserSession.tsx
++++ b/src/component/Admin/Settings/UserSession/UserSession.tsx
+@@ -179,7 +179,7 @@ const UserSession = () => {
+         </SettingSection>
+         <SettingSection>
+           <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-            {t("settings.thirdPartySignIn")} <ProChip label="Pro" color="primary" size="small" />
++            {t("settings.thirdPartySignIn")}
+           </Typography>
+           <SettingSectionContent>
+             <SettingForm lgWidth={5}>
+diff --git a/src/component/Admin/Settings/VAS/VAS.tsx b/src/component/Admin/Settings/VAS/VAS.tsx
+index be19599..b70bb72 100644
+--- a/src/component/Admin/Settings/VAS/VAS.tsx
++++ b/src/component/Admin/Settings/VAS/VAS.tsx
+@@ -1,225 +1,4 @@
+-import {
+-  Box,
+-  Button,
+-  FormControl,
+-  FormControlLabel,
+-  InputAdornment,
+-  Link,
+-  Stack,
+-  Switch,
+-  Typography,
+-} from "@mui/material";
+-import { bindTrigger, usePopupState } from "material-ui-popup-state/hooks";
+-import { useContext, useMemo, useState } from "react";
+-import { Trans, useTranslation } from "react-i18next";
+-import { DenseFilledTextField } from "../../../Common/StyledComponents.tsx";
+-import SettingForm, { ProChip } from "../../../Pages/Setting/SettingForm.tsx";
+-import ProDialog from "../../Common/ProDialog.tsx";
+-import { NoMarginHelperText, SettingSection, SettingSectionContent } from "../Settings.tsx";
+-import { SettingContext } from "../SettingWrapper.tsx";
+-import GiftCodes from "./GiftCodes.tsx";
+-import GroupProducts from "./GroupProducts.tsx";
+-import PaymentProviders from "./PaymentProviders.tsx";
+-import StorageProducts from "./StorageProducts.tsx";
+-interface CurrencyOption {
+-  code: string;
+-  symbol: string;
+-  unit: number;
+-  label: string;
++import ExtensionSettings from "../../Common/ExtensionSettings";
++export default function VAS() {
++  return <ExtensionSettings section="commerce" />;
+ }
+-
+-const VAS = () => {
+-  const { t } = useTranslation("dashboard");
+-  const [proOpen, setProOpen] = useState(false);
+-  const { formRef, setSettings, values } = useContext(SettingContext);
+-  const currencyPopupState = usePopupState({
+-    variant: "popover",
+-    popupId: "currencySelector",
+-  });
+-  const paymentConfig = useMemo(() => JSON.parse(values.payment || "{}"), [values.payment]);
+-  const storageProducts = useMemo(() => values.storage_products || "[]", [values.storage_products]);
+-  const groupSellData = useMemo(() => values.group_sell_data || "[]", [values.group_sell_data]);
+-
+-  const onProClick = (e: React.MouseEvent<HTMLDivElement>) => {
+-    e.preventDefault();
+-    setProOpen(true);
+-  };
+-
+-  return (
+-    <Box component={"form"} ref={formRef}>
+-      <ProDialog open={proOpen} onClose={() => setProOpen(false)} />
+-      <Stack spacing={5}>
+-        <SettingSection>
+-          <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-            {t("settings.creditAndVAS")} <ProChip label="Pro" color="primary" size="small" />
+-          </Typography>
+-          <SettingSectionContent onClick={onProClick}>
+-            <SettingForm lgWidth={5}>
+-              <FormControl fullWidth>
+-                <FormControlLabel control={<Switch checked={false} />} label={t("settings.enableCredit")} />
+-                <NoMarginHelperText>{t("settings.enableCreditDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <Stack spacing={2}>
+-              <SettingForm title={t("settings.creditPrice")} lgWidth={5}>
+-                <FormControl fullWidth>
+-                  <DenseFilledTextField type="number" slotProps={{ input: { readOnly: true } }} value={1} />
+-                  <NoMarginHelperText>{t("settings.creditPriceDes")}</NoMarginHelperText>
+-                </FormControl>
+-              </SettingForm>
+-
+-              <SettingForm title={t("settings.shareScoreRate")} lgWidth={5}>
+-                <FormControl fullWidth>
+-                  <DenseFilledTextField type="number" value={80} slotProps={{ input: { readOnly: true } }} />
+-                  <NoMarginHelperText>{t("settings.shareScoreRateDes")}</NoMarginHelperText>
+-                </FormControl>
+-              </SettingForm>
+-            </Stack>
+-
+-            <SettingForm title={t("vas.banBufferPeriod")} lgWidth={5}>
+-              <FormControl fullWidth>
+-                <DenseFilledTextField type="number" slotProps={{ input: { readOnly: true } }} value={864000} />
+-                <NoMarginHelperText>{t("vas.banBufferPeriodDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <SettingForm title={t("settings.cronNotifyUser")} lgWidth={5}>
+-              <FormControl fullWidth>
+-                <DenseFilledTextField value={"@every 1h"} slotProps={{ input: { readOnly: true } }} />
+-                <NoMarginHelperText>
+-                  <Trans
+-                    i18nKey="settings.cronDes"
+-                    values={{
+-                      des: t("settings.cronNotifyUserDes"),
+-                    }}
+-                    ns={"dashboard"}
+-                    components={[<Link href="https://crontab.guru/" target="_blank" rel="noopener noreferrer" />]}
+-                  />
+-                </NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <SettingForm title={t("settings.cronBanUser")} lgWidth={5}>
+-              <FormControl fullWidth>
+-                <DenseFilledTextField value={"@every 1h"} slotProps={{ input: { readOnly: true } }} />
+-                <NoMarginHelperText>
+-                  <Trans
+-                    i18nKey="settings.cronDes"
+-                    values={{
+-                      des: t("settings.cronBanUserDes"),
+-                    }}
+-                    ns={"dashboard"}
+-                    components={[<Link href="https://crontab.guru/" target="_blank" rel="noopener noreferrer" />]}
+-                  />
+-                </NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <SettingForm lgWidth={5}>
+-              <FormControl fullWidth>
+-                <FormControlLabel control={<Switch checked={false} />} label={t("settings.anonymousPurchase")} />
+-                <NoMarginHelperText>{t("settings.anonymousPurchaseDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <SettingForm lgWidth={5}>
+-              <FormControl fullWidth>
+-                <FormControlLabel control={<Switch checked={false} />} label={t("settings.shopNavEnabled")} />
+-                <NoMarginHelperText>{t("settings.shopNavEnabledDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-          </SettingSectionContent>
+-        </SettingSection>
+-
+-        <SettingSection>
+-          <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-            {t("settings.paymentSettings")} <ProChip label="Pro" color="primary" size="small" />
+-          </Typography>
+-          <SettingSectionContent onClick={onProClick}>
+-            <SettingForm title={t("settings.currencyCode")} lgWidth={5}>
+-              <FormControl fullWidth>
+-                <DenseFilledTextField
+-                  value="USD"
+-                  slotProps={{
+-                    input: {
+-                      readOnly: true,
+-                      endAdornment: (
+-                        <InputAdornment position="end">
+-                          <Button {...bindTrigger(currencyPopupState)}>{t("settings.selectCurrency")}</Button>
+-                        </InputAdornment>
+-                      ),
+-                    },
+-                  }}
+-                />
+-                <NoMarginHelperText>{t("settings.currencyCodeDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <SettingForm title={t("settings.currencySymbol")} lgWidth={5}>
+-              <FormControl fullWidth>
+-                <DenseFilledTextField value={"$"} slotProps={{ input: { readOnly: true } }} />
+-                <NoMarginHelperText>{t("settings.currencySymbolDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <SettingForm title={t("settings.currencyUnit")} lgWidth={5}>
+-              <FormControl fullWidth>
+-                <DenseFilledTextField type="number" value={100} slotProps={{ input: { readOnly: true } }} />
+-                <NoMarginHelperText>{t("settings.currencyUnitDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-
+-            <Box sx={{ mt: 2 }}>
+-              <Typography variant="subtitle1" gutterBottom>
+-                {t("settings.paymentProviders")}
+-              </Typography>
+-              <SettingForm lgWidth={6}>
+-                <PaymentProviders />
+-              </SettingForm>
+-            </Box>
+-          </SettingSectionContent>
+-        </SettingSection>
+-
+-        <SettingSection>
+-          <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-            {t("settings.storageProductSettings")} <ProChip label="Pro" color="primary" size="small" />
+-          </Typography>
+-          <SettingSectionContent onClick={onProClick}>
+-            <SettingForm lgWidth={12}>
+-              <FormControl fullWidth>
+-                <StorageProducts />
+-                <NoMarginHelperText>{t("settings.storageProductsDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-          </SettingSectionContent>
+-        </SettingSection>
+-
+-        <SettingSection>
+-          <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-            {t("settings.groupProductSettings")} <ProChip label="Pro" color="primary" size="small" />
+-          </Typography>
+-          <SettingSectionContent onClick={onProClick}>
+-            <SettingForm lgWidth={12}>
+-              <FormControl fullWidth>
+-                <GroupProducts />
+-                <NoMarginHelperText>{t("settings.groupProductsDes")}</NoMarginHelperText>
+-              </FormControl>
+-            </SettingForm>
+-          </SettingSectionContent>
+-        </SettingSection>
+-
+-        <SettingSection>
+-          <Typography variant="h6" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
+-            {t("giftCodes.giftCodesSettings")} <ProChip label="Pro" color="primary" size="small" />
+-          </Typography>
+-          <SettingSectionContent onClick={onProClick}>
+-            <GiftCodes storageProductsConfig={storageProducts} groupProductsConfig={groupSellData} />
+-          </SettingSectionContent>
+-        </SettingSection>
+-      </Stack>
+-    </Box>
+-  );
+-};
+-
+-export default VAS;
+diff --git a/src/component/Admin/StoragePolicy/EditStoragePolicy/FormSections/BasicInfoSection.tsx b/src/component/Admin/StoragePolicy/EditStoragePolicy/FormSections/BasicInfoSection.tsx
+index 33675fe..67d310d 100644
+--- a/src/component/Admin/StoragePolicy/EditStoragePolicy/FormSections/BasicInfoSection.tsx
++++ b/src/component/Admin/StoragePolicy/EditStoragePolicy/FormSections/BasicInfoSection.tsx
+@@ -1,3 +1,4 @@
++import AllowedPolicySelection from "../../../Group/EditGroup/AllowedPolicySelection";
+ import {
+   Checkbox,
+   CircularProgress,
+@@ -285,6 +286,15 @@ const BasicInfoSection = () => {
+         {t("policy.basicInfo")}
+       </Typography>
+       <SettingSectionContent>
++        {values.type === PolicyType.load_balance && (
++          <AllowedPolicySelection
++            physicalOnly
++            value={values.settings?.balanced_policies ?? []}
++            onChange={(ids) =>
++              setPolicy((prev) => ({ ...prev, settings: { ...prev.settings, balanced_policies: ids } }))
++            }
++          />
++        )}
+         <SettingForm title={t("policy.name")} lgWidth={5}>
+           <FormControl fullWidth>
+             <DenseFilledTextField required value={values.name} onChange={onNameChange} />
+diff --git a/src/component/Admin/StoragePolicy/SelectProvider.tsx b/src/component/Admin/StoragePolicy/SelectProvider.tsx
+index d339985..38dfbbc 100644
+--- a/src/component/Admin/StoragePolicy/SelectProvider.tsx
++++ b/src/component/Admin/StoragePolicy/SelectProvider.tsx
+@@ -44,21 +44,16 @@ const SelectProvider = ({ open, onClose, onSelect }: SelectProviderProps) => {
+         maxWidth: "sm",
+       }}
+     >
+-      <ProDialog open={proOpen} onClose={() => setProOpen(false)} />
+       <DialogContent dividers>
+         <Grid2 container spacing={2} sx={{ mt: 2 }}>
+           {Object.values(PolicyType).map((type) => (
+             <Grid2 key={type.toString()} size={{ sm: 12, md: 6 }}>
+               <StyledCard sx={{ display: "flex" }}>
+-                <CardActionArea
+-                  sx={{ display: "flex", justifyContent: "flex-start" }}
+-                  onClick={() => (PolicyPropsMap[type].pro ? setProOpen(true) : onSelect(type))}
+-                >
++                <CardActionArea sx={{ display: "flex", justifyContent: "flex-start" }} onClick={() => onSelect(type)}>
+                   <CardMedia component="img" image={PolicyPropsMap[type].img} sx={{ width: 100, height: 60 }} />
+                   <CardContent>
+                     <Typography variant="subtitle1" color="textSecondary">
+                       {t(PolicyPropsMap[type].name)}
+-                      {PolicyPropsMap[type].pro && <ProChip size="small" label="Pro" />}
+                     </Typography>
+                   </CardContent>
+                 </CardActionArea>
+diff --git a/src/component/Admin/StoragePolicy/StoragePolicySetting.tsx b/src/component/Admin/StoragePolicy/StoragePolicySetting.tsx
+index 653455a..e883391 100644
+--- a/src/component/Admin/StoragePolicy/StoragePolicySetting.tsx
++++ b/src/component/Admin/StoragePolicy/StoragePolicySetting.tsx
+@@ -29,6 +29,7 @@ import QiniuWizard from "./Wizards/Qiniu/QiniuWizard";
+ import RemoteWizard from "./Wizards/Remote/RemoteWizard";
+ import S3Wizard from "./Wizards/S3/S3Wizard";
+ import KS3Wizard from "./Wizards/KS3/KS3Wizard";
++import LoadBalanceWizard from "./Wizards/LoadBalanceWizard";
+ import UpyunWizard from "./Wizards/Upyun/UpyunWizard";
+ 
+ export const PageQuery = "page";
+@@ -61,7 +62,6 @@ export interface PolicyProps {
+   credentialDes?: React.ReactNode;
+   corsExposedHeaders?: string[];
+   endpointNotEnforcePrefix?: boolean;
+-  pro?: boolean;
+   regionCode?: string;
+   regionCodeDes?: React.ReactNode;
+ }
+@@ -78,7 +78,7 @@ export const PolicyPropsMap: Record<PolicyType, PolicyProps> = {
+     name: "policy.load_balance",
+     img: "/static/img/lb.svg",
+     wizardSize: "sm",
+-    pro: true,
++    wizard: LoadBalanceWizard,
+   },
+   [PolicyType.remote]: {
+     name: "policy.remote",
+@@ -471,7 +471,9 @@ const StoragePolicySetting = () => {
+             policies.map((p) => <StoragePolicyCard key={`loading-${p.id}`} loading={true} />)}
+           {loading &&
+             policies.length === 0 &&
+-            Array.from(Array(5)).map((_, index) => <StoragePolicyCard key={`loading-placeholder-${index}`} loading={true} />)}
++            Array.from(Array(5)).map((_, index) => (
++              <StoragePolicyCard key={`loading-placeholder-${index}`} loading={true} />
++            ))}
+         </Grid>
+         {count > 0 && (
+           <Box sx={{ mt: 1 }}>
+diff --git a/src/component/FileManager/ContextMenu/useActionDisplayOpt.ts b/src/component/FileManager/ContextMenu/useActionDisplayOpt.ts
+index a2e1e62..3dcfa23 100644
+--- a/src/component/FileManager/ContextMenu/useActionDisplayOpt.ts
++++ b/src/component/FileManager/ContextMenu/useActionDisplayOpt.ts
+@@ -117,7 +117,7 @@ export const getActionOpt = (
+     }
+ 
+     const parentCap = new Boolset(parent.capability);
+-    display.showCreateFolder = parentCap.enabled(NavigatorCapability.create_file) && parent.owned;
++    display.showCreateFolder = parentCap.enabled(NavigatorCapability.create_file);
+     display.showCreateFile = display.showCreateFolder && fmIndex == FileManagerIndex.main;
+     display.showUpload = display.showCreateFile;
+     if (display.showCreateFile) {
+@@ -140,7 +140,8 @@ export const getActionOpt = (
+   const parentUrl = new CrUri(targets?.[0]?.path ?? defaultPath);
+   targets.forEach((target) => {
+     let readable = true;
+-    let updatable = target.owned && parentUrl.fs() != Filesystem.share;
++    let updatable =
++      new Boolset(target.capability).enabled(NavigatorCapability.upload_file) && parentUrl.fs() != Filesystem.share;
+ 
+     if (display.allReadable && !readable) {
+       display.allReadable = false;
+@@ -210,7 +211,7 @@ export const getActionOpt = (
+     display.allUpdatable &&
+     display.orCapability &&
+     display.orCapability.enabled(NavigatorCapability.rename_file);
+-  display.showCopy = display.hasUpdatable && !!display.orCapability;
++  display.showCopy = display.hasReadable && !!display.orCapability && parentUrl.fs() == Filesystem.my;
+   display.showShare =
+     targets.length == 1 &&
+     !!currentUser &&
+diff --git a/src/component/FileManager/Dialogs/DeleteConfirmation.tsx b/src/component/FileManager/Dialogs/DeleteConfirmation.tsx
+index c00d229..fc34b7c 100644
+--- a/src/component/FileManager/Dialogs/DeleteConfirmation.tsx
++++ b/src/component/FileManager/Dialogs/DeleteConfirmation.tsx
+@@ -67,7 +67,7 @@ const DeleteConfirmation = () => {
+   }, [promiseId, unlink, skipSoftDelete, singleFilePermanently, multipleFilesPermanently]);
+ 
+   const permission = SessionManager.currentUserGroupPermission();
+-  const showSkipSoftDeleteOption = !hasTrashFiles;
++  const showSkipSoftDeleteOption = !hasTrashFiles && !!targets?.every((file) => file.owned);
+   const showUnlinkOption = (skipSoftDelete || hasTrashFiles) && permission.enabled(GroupPermission.advance_delete);
+   const showAdvanceOptions = showUnlinkOption || showSkipSoftDeleteOption;
+ 
+diff --git a/src/component/FileManager/Dialogs/Share/ShareDialog.tsx b/src/component/FileManager/Dialogs/Share/ShareDialog.tsx
+index 6a82ef2..c53bef3 100644
+--- a/src/component/FileManager/Dialogs/Share/ShareDialog.tsx
++++ b/src/component/FileManager/Dialogs/Share/ShareDialog.tsx
+@@ -15,7 +15,8 @@ import DraggableDialog from "../../../Dialogs/DraggableDialog.tsx";
+ import CopyOutlined from "../../../Icons/CopyOutlined.tsx";
+ import Share from "../../../Icons/Share.tsx";
+ import { FileManagerIndex } from "../../FileManager.tsx";
+-import ShareSettingContent, { downloadOptions, expireOptions, ShareSetting } from "./ShareSetting.tsx";
++import Collaborators from "../../Sidebar/Collaborators.tsx";
++import ShareSettingContent, { downloadOptions, expireOptions, ShareSetting, sharePrice } from "./ShareSetting.tsx";
+ 
+ const initialSetting: ShareSetting = {
+   expires_val: expireOptions[2],
+@@ -29,6 +30,8 @@ interface ShareLinkPassword {
+ 
+ const shareToSetting = (share: ShareModel, t: TFunction): ShareSetting => {
+   const res: ShareSetting = {
++    paid: (share.price ?? 0) > 0,
++    price_yuan: ((share.price ?? 0) / 100).toFixed(2),
+     is_private: share.is_private,
+     password: share.password,
+     use_custom_password: true,
+@@ -153,6 +156,7 @@ const ShareDialog = () => {
+         title={t(`application:modals.${editTarget ? "edit" : "create"}ShareLink`)}
+         showActions
+         loading={loading}
++        disabled={!!setting.paid && !Number.isFinite(sharePrice(setting))}
+         showCancel
+         hideOk={!!shareLink}
+         onAccept={onAccept}
+@@ -177,6 +181,11 @@ const ShareDialog = () => {
+         }
+       >
+         <DialogContent sx={{ pb: 0 }}>
++          {target && !editTarget && (
++            <Box sx={{ mb: 2 }}>
++              <Collaborators file={target} />
++            </Box>
++          )}
+           <AutoHeight>
+             <SwitchTransition>
+               <CSSTransition
+diff --git a/src/component/FileManager/Dialogs/Share/ShareSetting.tsx b/src/component/FileManager/Dialogs/Share/ShareSetting.tsx
+index 2ac9526..166e1c5 100644
+--- a/src/component/FileManager/Dialogs/Share/ShareSetting.tsx
++++ b/src/component/FileManager/Dialogs/Share/ShareSetting.tsx
+@@ -1,5 +1,6 @@
+ import {
+   Autocomplete,
++  Alert,
+   Checkbox,
+   Collapse,
+   createFilterOptions,
+@@ -74,6 +75,8 @@ const AccordionDetails = styled(MuiAccordionDetails)(({ theme }) => ({
+ const StyledListItemButton = styled(ListItemButton)(() => ({}));
+ 
+ export interface ShareSetting {
++  paid?: boolean;
++  price_yuan?: string;
+   is_private?: boolean;
+   use_custom_password?: boolean;
+   password?: string;
+@@ -86,6 +89,16 @@ export interface ShareSetting {
+   expires_val: valueOption;
+ }
+ 
++// Parse decimal CNY as integer fen without rounding floating point amounts.
++export function sharePrice(setting: ShareSetting): number {
++  if (!setting.paid) return 0;
++  const raw = setting.price_yuan ?? "";
++  if (!/^(0|[1-9]\d{0,6})(\.\d{1,2})?$/.test(raw)) return NaN;
++  const [whole, fraction = ""] = raw.split(".");
++  const value = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
++  return value >= 1 && value <= 100000000 ? value : NaN;
++}
++
+ export interface ShareSettingProps {
+   setting: ShareSetting;
+   file?: FileResponse;
+@@ -124,7 +137,8 @@ const isNumeric = (num: any) =>
+ const filter = createFilterOptions<valueOption>();
+ 
+ const ShareSettingContent = ({ setting, file, editing, onSettingChange }: ShareSettingProps) => {
+-  const { t } = useTranslation();
++  const { t, i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
+ 
+   const [expanded, setExpanded] = useState<string | undefined>(undefined);
+ 
+@@ -146,6 +160,35 @@ const ShareSettingContent = ({ setting, file, editing, onSettingChange }: ShareS
+         padding: 0,
+       }}
+     >
++      <SmallFormControlLabel
++        control={
++          <Checkbox
++            checked={!!setting.paid}
++            onChange={(_e, checked) => onSettingChange({ ...setting, paid: checked })}
++          />
++        }
++        label={zh ? "收费分享" : "Paid share"}
++      />
++      {setting.paid && (
++        <Stack spacing={1} sx={{ mb: 2 }}>
++          <TextField
++            label={zh ? "解锁价格（人民币元）" : "Unlock price (CNY)"}
++            value={setting.price_yuan ?? ""}
++            slotProps={{ htmlInput: { inputMode: "decimal", maxLength: 10 } }}
++            error={!Number.isFinite(sharePrice(setting))}
++            helperText={zh ? "0.01–1,000,000.00 元，最多两位小数" : "0.01–1,000,000.00 CNY, up to two decimal places"}
++            onChange={(e) => {
++              if (/^\d{0,7}(\.\d{0,2})?$/.test(e.target.value))
++                onSettingChange({ ...setting, price_yuan: e.target.value });
++            }}
++          />
++          <Alert severity="info">
++            {zh
++              ? "买家需登录后付款，一次购买可访问该分享有效期内的内容，仍受密码和下载次数限制。款项进入站点商户，不会自动分账或提现。修改价格不影响已购用户。"
++              : "Buyers sign in and pay once for access while this share remains valid. Password and download limits still apply. Payments go to the site merchant; there are no automatic payouts. Price changes preserve existing purchases."}
++          </Alert>
++        </Stack>
++      )}
+       <Accordion expanded={expanded === "is_private"} onChange={handleExpand("is_private")}>
+         <AccordionSummary aria-controls="panel1a-content" id="panel1a-header">
+           <StyledListItemButton>
+diff --git a/src/component/FileManager/Dialogs/VersionControl.tsx b/src/component/FileManager/Dialogs/VersionControl.tsx
+index d70333d..cf8e673 100644
+--- a/src/component/FileManager/Dialogs/VersionControl.tsx
++++ b/src/component/FileManager/Dialogs/VersionControl.tsx
+@@ -1,3 +1,4 @@
++import Boolset from "../../../util/boolset.ts";
+ import {
+   Alert,
+   Box,
+@@ -24,7 +25,7 @@ import { openViewers } from "../../../redux/thunks/viewer.ts";
+ import { sizeToString } from "../../../util";
+ import AutoHeight from "../../Common/AutoHeight.tsx";
+ import { closeVersionControlDialog } from "../../../redux/globalStateSlice.ts";
+-import { Entity, EntityType, FileResponse } from "../../../api/explorer.ts";
++import { Entity, EntityType, FileResponse, NavigatorCapability } from "../../../api/explorer.ts";
+ import { deleteVersion, getFileInfo } from "../../../api/api.ts";
+ import { NoWrapTableCell, StyledTableContainerPaper } from "../../Common/StyledComponents.tsx";
+ import TimeBadge from "../../Common/TimeBadge.tsx";
+@@ -181,16 +182,20 @@ const VersionControl = () => {
+         <SquareMenuItem onClick={downloadEntity} dense>
+           <ListItemText>{t("application:fileManager.download")}</ListItemText>
+         </SquareMenuItem>
+-        {target?.owned && actionTarget?.id !== fileExtended?.primary_entity && (
+-          <SquareMenuItem onClick={setAsCurrent} dense>
+-            <ListItemText>{t("application:fileManager.setAsCurrent")}</ListItemText>
+-          </SquareMenuItem>
+-        )}
+-        {target?.owned && actionTarget?.id !== fileExtended?.primary_entity && (
+-          <SquareMenuItem onClick={deleteTargetVersion} dense>
+-            <ListItemText>{t("application:fileManager.delete")}</ListItemText>
+-          </SquareMenuItem>
+-        )}
++        {new Boolset(target?.capability).enabled(NavigatorCapability.version_control) &&
++          new Boolset(target?.capability).enabled(NavigatorCapability.upload_file) &&
++          actionTarget?.id !== fileExtended?.primary_entity && (
++            <SquareMenuItem onClick={setAsCurrent} dense>
++              <ListItemText>{t("application:fileManager.setAsCurrent")}</ListItemText>
++            </SquareMenuItem>
++          )}
++        {new Boolset(target?.capability).enabled(NavigatorCapability.version_control) &&
++          new Boolset(target?.capability).enabled(NavigatorCapability.upload_file) &&
++          actionTarget?.id !== fileExtended?.primary_entity && (
++            <SquareMenuItem onClick={deleteTargetVersion} dense>
++              <ListItemText>{t("application:fileManager.delete")}</ListItemText>
++            </SquareMenuItem>
++          )}
+       </Menu>
+       <DraggableDialog
+         title={t("application:fileManager.manageVersions")}
+diff --git a/src/component/FileManager/Dnd/DndWrappedFile.tsx b/src/component/FileManager/Dnd/DndWrappedFile.tsx
+index a976fca..5185dd0 100644
+--- a/src/component/FileManager/Dnd/DndWrappedFile.tsx
++++ b/src/component/FileManager/Dnd/DndWrappedFile.tsx
+@@ -1,7 +1,7 @@
+ import { memo, useCallback, useContext, useEffect } from "react";
+ import { useDrag, useDrop } from "react-dnd";
+ import { getEmptyImage } from "react-dnd-html5-backend";
+-import { FileResponse, FileType } from "../../../api/explorer.ts";
++import { FileResponse, FileType, NavigatorCapability } from "../../../api/explorer.ts";
+ import { setDragging } from "../../../redux/globalStateSlice.ts";
+ import { useAppDispatch, useAppSelector } from "../../../redux/hooks.ts";
+ import { processDnd } from "../../../redux/thunks/file.ts";
+@@ -9,6 +9,7 @@ import { getFileLinkedUri, mergeRefs } from "../../../util";
+ 
+ import { useTheme } from "@mui/material/styles";
+ import useMediaQuery from "@mui/material/useMediaQuery";
++import Boolset from "../../../util/boolset.ts";
+ import CrUri, { Filesystem } from "../../../util/uri.ts";
+ import { FileBlockProps } from "../Explorer/Explorer.tsx";
+ import { FileManagerIndex } from "../FileManager.tsx";
+@@ -66,7 +67,7 @@ export const useFileDrag = ({ file, includeSelected, dropUri }: UseFileDragProps
+       }
+ 
+       const crUri = new CrUri(file.path);
+-      return file.owned && crUri.fs() != Filesystem.share;
++      return new Boolset(file.capability).enabled(NavigatorCapability.upload_file) && crUri.fs() != Filesystem.share;
+     },
+     collect: (monitor) => ({
+       isDragging: monitor.isDragging(),
+@@ -81,7 +82,11 @@ export const useFileDrag = ({ file, includeSelected, dropUri }: UseFileDragProps
+       canDrop: monitor.canDrop(),
+     }),
+     canDrop: (item, _monitor) => {
+-      const dropExist = !!dropUri || (!!file && file.type == FileType.folder);
++      const dropExist =
++        !!dropUri ||
++        (!!file &&
++          file.type == FileType.folder &&
++          new Boolset(file.capability).enabled(NavigatorCapability.create_file));
+       if (!dropExist || fmIndex == FileManagerIndex.selector) {
+         return false;
+       }
+diff --git a/src/component/FileManager/Explorer/ExplorerError.tsx b/src/component/FileManager/Explorer/ExplorerError.tsx
+index 39c0f23..f34a89c 100644
+--- a/src/component/FileManager/Explorer/ExplorerError.tsx
++++ b/src/component/FileManager/Explorer/ExplorerError.tsx
+@@ -11,6 +11,7 @@ import ArrowLeft from "../../Icons/ArrowLeft.tsx";
+ import LinkDismiss from "../../Icons/LinkDismiss.tsx";
+ import LockClosed from "../../Icons/LockClosed.tsx";
+ import { FmIndexContext } from "../FmIndexContext.tsx";
++import PaidShareAccess from "./PaidShareAccess.tsx";
+ 
+ interface ExplorerErrorProps {
+   error?: Response<any>;
+@@ -88,6 +89,8 @@ const ExplorerError = memo(
+           );
+         case Code.IncorrectPassword:
+           return <RetryPassword />;
++        case Code.PurchaseRequired:
++          return <PaidShareAccess />;
+         // @ts-ignore
+         case Code.NodeFound:
+           if (fs == Filesystem.share) {
+diff --git a/src/component/FileManager/Sidebar/CustomProps/CustomPropsItem.tsx b/src/component/FileManager/Sidebar/CustomProps/CustomPropsItem.tsx
+index 210250e..ebc166c 100644
+--- a/src/component/FileManager/Sidebar/CustomProps/CustomPropsItem.tsx
++++ b/src/component/FileManager/Sidebar/CustomProps/CustomPropsItem.tsx
+@@ -65,6 +65,10 @@ export const getPropsContent = (
+   fullSize?: boolean,
+ ) => {
+   switch (prop.props.type) {
++    case CustomPropsType.user:
++      return (
++        <UserPropsContent prop={prop} onChange={onChange} loading={loading} readOnly={readOnly} fullSize={fullSize} />
++      );
+     case CustomPropsType.text:
+       return (
+         <TextPropsContent prop={prop} onChange={onChange} loading={loading} readOnly={readOnly} fullSize={fullSize} />
+diff --git a/src/component/FileManager/Sidebar/Details.tsx b/src/component/FileManager/Sidebar/Details.tsx
+index 1d1df2d..d03afce 100644
+--- a/src/component/FileManager/Sidebar/Details.tsx
++++ b/src/component/FileManager/Sidebar/Details.tsx
+@@ -9,6 +9,7 @@ import CustomProps from "./CustomProps/CustomProps.tsx";
+ import Data from "./Data.tsx";
+ import MediaInfo from "./MediaInfo.tsx";
+ import Tags from "./Tags.tsx";
++import Collaborators from "./Collaborators.tsx";
+ import { DisplayOption } from "../ContextMenu/useActionDisplayOpt.ts";
+ 
+ export interface DetailsProps {
+@@ -57,6 +58,7 @@ const Details = ({ target, inPhotoViewer, setTarget, targetDisplayOptions }: Det
+         />
+       )}
+       <MediaInfo target={target} />
++      <Collaborators file={target} />
+       <CustomProps file={target} setTarget={setTarget} targetDisplayOptions={targetDisplayOptions} />
+       <BasicInfo target={target} />
+       <Tags target={target} />
+diff --git a/src/component/Frame/NavBar/PageNavigation.tsx b/src/component/Frame/NavBar/PageNavigation.tsx
+index 00be5cc..e0e4c48 100644
+--- a/src/component/Frame/NavBar/PageNavigation.tsx
++++ b/src/component/Frame/NavBar/PageNavigation.tsx
+@@ -54,11 +54,12 @@ export interface NavigationItem {
+   icon?: ((props: SvgIconProps) => JSX.Element)[] | (typeof SvgIcon)[];
+   iconifyName?: string;
+   path: string;
+-  pro?: boolean;
+ }
+ 
+ let NavigationItems: NavigationItem[];
+ NavigationItems = [
++  { label: "navbar.sharedWithMe", icon: [PeopleFilled, People], path: "/home?path=cloudreve%3A%2F%2Fshared_with_me" },
++  { label: "navbar.shop", icon: [PaymentFilled, Payment], path: "/shop" },
+   {
+     label: "navbar.myShare",
+     icon: [ShareAndroid, ShareOutlined],
+@@ -91,34 +92,21 @@ export const SideNavItemComponent = ({ item }: { item: NavigationItem }) => {
+   const theme = useTheme();
+   const [proOpen, setProOpen] = useState(false);
+   const active = useMemo(() => {
++    if (item.path.includes("?")) {
++      const target = new URL(item.path, window.location.origin);
++      return (
++        location.pathname === target.pathname &&
++        new URLSearchParams(location.search).get("path") === target.searchParams.get("path")
++      );
++    }
+     return location.pathname == item.path || location.pathname.startsWith(item.path + "/");
+-  }, [location.pathname, item.path]);
++  }, [location.pathname, location.search, item.path]);
+   return (
+     <>
+-      {item.pro && <ProDialog open={proOpen} onClose={() => setProOpen(false)} />}
+       <SideNavItem
+         key={item.label}
+-        onClick={() =>
+-          item.pro ? setProOpen(true) : item.iconifyName ? window.open(item.path, "_blank") : navigate(item.path)
+-        }
+-        label={
+-          item.pro ? (
+-            <Box sx={{ display: "flex", alignItems: "center" }}>
+-              {t(item.label)}
+-              <ProChip
+-                sx={{
+-                  height: "16px",
+-                  fontSize: (t) => t.typography.caption.fontSize,
+-                }}
+-                label="Pro"
+-                color="primary"
+-                size="small"
+-              />
+-            </Box>
+-          ) : (
+-            t(item.label)
+-          )
+-        }
++        onClick={() => (item.iconifyName ? window.open(item.path, "_blank") : navigate(item.path))}
++        label={t(item.label)}
+         active={active}
+         icon={
+           !item.icon ? (
+@@ -152,6 +140,7 @@ export const SideNavItemComponent = ({ item }: { item: NavigationItem }) => {
+ 
+ let AdminNavigationItems: NavigationItem[];
+ AdminNavigationItems = [
++  { label: "navbar.shop", icon: [PaymentFilled, Payment], path: "/shop" },
+   {
+     label: "dashboard:nav.summary",
+     icon: [DataHistogramFilled, DataHistogram],
+@@ -211,19 +200,16 @@ AdminNavigationItems = [
+     label: "dashboard:vas.orders",
+     icon: [PaymentFilled, Payment],
+     path: "/admin/payment",
+-    pro: true,
+   },
+   {
+     label: "dashboard:nav.events",
+     icon: [SendLoggingFilled, SendLogging],
+     path: "/admin/event",
+-    pro: true,
+   },
+   {
+     label: "dashboard:nav.abuseReport",
+     icon: [Warning, WarningOutlined],
+     path: "/admin/abuse",
+-    pro: true,
+   },
+   {
+     label: "dashboard:nav.oauthClients",
+diff --git a/src/component/Pages/Login/Phases/PhaseCollectEmail.tsx b/src/component/Pages/Login/Phases/PhaseCollectEmail.tsx
+index 423836b..206f4f5 100644
+--- a/src/component/Pages/Login/Phases/PhaseCollectEmail.tsx
++++ b/src/component/Pages/Login/Phases/PhaseCollectEmail.tsx
+@@ -7,6 +7,7 @@ import { useAppSelector } from "../../../../redux/hooks.ts";
+ import { useQuery } from "../../../../util";
+ import { OutlineIconTextField } from "../../../Common/Form/OutlineIconTextField.tsx";
+ import MailOutlined from "../../../Icons/MailOutlined.tsx";
++import SSOLoginButtons from "../Signin/SSOLoginButtons";
+ import PasskeyLoginButton from "../Signin/PasskeyLoginButton.tsx";
+ import { Control } from "../Signin/SignIn.tsx";
+ 
+@@ -83,6 +84,7 @@ const PhaseCollectEmail = ({ email, setEmail, control, onOAuthPasskeyLogin }: Ph
+           autoFocus
+         />
+       </FormControl>
++      <SSOLoginButtons onLoginSuccess={onOAuthPasskeyLogin} />
+       {control?.submit}
+       {control?.back}
+       {register_enabled && (
+diff --git a/src/component/Pages/Setting/SettingForm.tsx b/src/component/Pages/Setting/SettingForm.tsx
+index 29106fe..3ceca0f 100644
+--- a/src/component/Pages/Setting/SettingForm.tsx
++++ b/src/component/Pages/Setting/SettingForm.tsx
+@@ -1,14 +1,13 @@
+-import { Chip, Grid2, Typography, styled } from "@mui/material";
++import { Chip, ChipProps, Grid2, Typography } from "@mui/material";
++import { useTranslation } from "react-i18next";
+ import { useCallback, useEffect, useState } from "react";
+ import ProDialog from "../../Admin/Common/ProDialog";
+ 
+-export const ProChip = styled(Chip)(({ theme }) => ({
+-  marginLeft: 8,
+-  height: "20px",
+-  fontSize: "12px",
+-  background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
+-  color: theme.palette.primary.contrastText,
+-}));
++// Legacy name retained for placeholders; this label describes implementation status.
++export const ProChip = (props: ChipProps) => {
++  const { i18n } = useTranslation();
++  return <Chip {...props} color="default" label={i18n.language.startsWith("zh") ? "尚未实现" : "Not implemented"} />;
++};
+ 
+ export interface SettingFormProps {
+   title?: React.ReactNode;
+diff --git a/src/component/Pages/Shares/ShareCard.tsx b/src/component/Pages/Shares/ShareCard.tsx
+index 194d0ae..b037309 100644
+--- a/src/component/Pages/Shares/ShareCard.tsx
++++ b/src/component/Pages/Shares/ShareCard.tsx
+@@ -214,6 +214,9 @@ const ShareCard = ({ share, onShareDeleted, onLoad, loading }: ShareCardProps) =
+                     </Typography>
+                   </Tooltip>
+                 </NoWrapBox>
++                {!!share?.price && (
++                  <Chip size="small" label={`¥${(share.price / 100).toFixed(2)}`} sx={{ ml: 1, height: 18 }} />
++                )}
+                 {share?.expired && (
+                   <Chip size="small" label={t("application:share.expired")} sx={{ ml: 1, height: 18 }} />
+                 )}
+diff --git a/src/component/Pages/Shares/ShareList.tsx b/src/component/Pages/Shares/ShareList.tsx
+index a9063db..c196827 100644
+--- a/src/component/Pages/Shares/ShareList.tsx
++++ b/src/component/Pages/Shares/ShareList.tsx
+@@ -8,6 +8,7 @@ import { useAppDispatch } from "../../../redux/hooks.ts";
+ import Nothing from "../../Common/Nothing.tsx";
+ import { setSelected } from "../../../redux/fileManagerSlice.ts";
+ import ShareCard from "./ShareCard.tsx";
++import ShareSales from "./ShareSales.tsx";
+ import { Share } from "../../../api/explorer.ts";
+ import { DenseSelect } from "../../Common/StyledComponents.tsx";
+ import { SquareMenuItem } from "../../FileManager/ContextMenu/ContextMenu.tsx";
+@@ -103,6 +104,7 @@ const ShareList = () => {
+           title={t("application:navbar.myShare")}
+         />
+ 
++        <ShareSales />
+         <Grid container spacing={1}>
+           {shares.map((share) => (
+             <ShareCard share={share} key={share.id} onShareDeleted={onShareDeleted} />
+diff --git a/src/redux/thunks/share.ts b/src/redux/thunks/share.ts
+index a5ad74e..08cbd27 100644
+--- a/src/redux/thunks/share.ts
++++ b/src/redux/thunks/share.ts
+@@ -3,7 +3,7 @@ import { closeSnackbar, enqueueSnackbar, SnackbarKey } from "notistack";
+ import { getFileInfo, getFileList, getShareInfo, sendCreateShare, sendUpdateShare } from "../../api/api.ts";
+ import { FileResponse, Share, ShareCreateService } from "../../api/explorer.ts";
+ import { DefaultCloseAction, OpenReadMeAction } from "../../component/Common/Snackbar/snackbar.tsx";
+-import { ShareSetting } from "../../component/FileManager/Dialogs/Share/ShareSetting.tsx";
++import { ShareSetting, sharePrice } from "../../component/FileManager/Dialogs/Share/ShareSetting.tsx";
+ import { getPaginationState } from "../../component/FileManager/Pagination/PaginationFooter.tsx";
+ import CrUri from "../../util/uri.ts";
+ import { fileUpdated } from "../fileManagerSlice.ts";
+@@ -24,7 +24,10 @@ export function createOrUpdateShareLink(
+   existed?: string,
+ ): AppThunk<Promise<string>> {
+   return async (dispatch, getState) => {
++    const price = sharePrice(setting);
++    if (!Number.isFinite(price)) throw new Error("Invalid share price");
+     const req: ShareCreateService = {
++      price,
+       uri: file.path,
+       is_private: setting.is_private,
+       password: setting.password,
+diff --git a/src/router/index.tsx b/src/router/index.tsx
+index 8552277..1db4e08 100644
+--- a/src/router/index.tsx
++++ b/src/router/index.tsx
+@@ -1,3 +1,4 @@
++import ExtensionRecords from "../component/Admin/Common/ExtensionRecords";
+ import { createBrowserRouter, Navigate } from "react-router-dom";
+ import { App } from "../App.tsx";
+ import ErrorBoundary from "../component/Common/ErrorBoundary.tsx";
+@@ -77,6 +78,7 @@ export const router = createBrowserRouter([
+           return { Component: AutoNavbarFrame };
+         },
+         children: [
++          { path: "/shop", lazy: async () => ({ Component: (await import("../component/Pages/Shop")).default }) },
+           {
+             path: "/admin",
+             children: [
+@@ -84,6 +86,9 @@ export const router = createBrowserRouter([
+                 path: "/admin",
+                 element: <Navigate to={"/admin/home"} />,
+               },
++              { path: "payment", lazy: async () => ({ Component: () => <ExtensionRecords kind="orders" /> }) },
++              { path: "event", lazy: async () => ({ Component: () => <ExtensionRecords kind="audit" /> }) },
++              { path: "abuse", lazy: async () => ({ Component: () => <ExtensionRecords kind="reports" /> }) },
+               {
+                 path: "home",
+                 async lazy() {
+diff --git a/src/component/Admin/Common/ExtensionRecords.tsx b/src/component/Admin/Common/ExtensionRecords.tsx
+new file mode 100644
+index 0000000..8b6d316
+--- /dev/null
++++ b/src/component/Admin/Common/ExtensionRecords.tsx
+@@ -0,0 +1,134 @@
++import {
++  Button,
++  Stack,
++  Table,
++  TableBody,
++  TableCell,
++  TableContainer,
++  TableHead,
++  TableRow,
++  TextField,
++  Typography,
++} from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { send } from "../../../api/request";
++import { useAppDispatch } from "../../../redux/hooks";
++
++export default function ExtensionRecords({ kind }: { kind: "audit" | "orders" | "reports" }) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [page, setPage] = useState(1);
++  const [result, setResult] = useState<{ items: any[]; total: number }>({ items: [], total: 0 });
++  const [generation, setGeneration] = useState(0);
++  const [filter, setFilter] = useState("");
++  useEffect(() => {
++    dispatch(send(`/admin/extensions/${kind}`, { params: { page, action: filter } }))
++      .then(setResult)
++      .catch(() => {});
++  }, [dispatch, kind, page, generation, filter]);
++  const keys =
++    kind === "audit"
++      ? ["created_at", "actor_id", "action", "resource", "status", "ip"]
++      : kind === "orders"
++        ? ["created_at", "number", "user_id", "product_name", "amount", "provider", "status"]
++        : ["created_at", "share_id", "reporter_id", "reason", "status", "resolution"];
++  return (
++    <Stack spacing={2}>
++      <Typography variant="h6">
++        {kind === "audit"
++          ? zh
++            ? "审计日志"
++            : "Audit log"
++          : kind === "orders"
++            ? zh
++              ? "订单"
++              : "Orders"
++            : zh
++              ? "滥用举报"
++              : "Abuse reports"}
++      </Typography>
++      {kind === "audit" && (
++        <TextField
++          size="small"
++          label={zh ? "按操作筛选" : "Filter actions"}
++          value={filter}
++          onChange={(e) => {
++            setFilter(e.target.value);
++            setPage(1);
++          }}
++        />
++      )}
++      <TableContainer>
++        <Table size="small">
++          <TableHead>
++            <TableRow>
++              {keys.map((key) => (
++                <TableCell key={key}>{key}</TableCell>
++              ))}
++              {kind === "reports" && <TableCell>{zh ? "处理" : "Actions"}</TableCell>}
++            </TableRow>
++          </TableHead>
++          <TableBody>
++            {result.items.map((row) => (
++              <TableRow key={row.id}>
++                {keys.map((key) => (
++                  <TableCell key={key}>{String(row[key] ?? "")}</TableCell>
++                ))}
++                {kind === "reports" && (
++                  <TableCell>
++                    <Button
++                      disabled={row.status !== "open"}
++                      onClick={async () => {
++                        await dispatch(
++                          send(`/admin/extensions/reports/${row.id}`, {
++                            method: "PATCH",
++                            data: {
++                              status: "resolved",
++                              disable_share: true,
++                              resolution: zh ? "已禁用分享" : "Share disabled",
++                            },
++                          }),
++                        );
++                        setGeneration((n) => n + 1);
++                      }}
++                    >
++                      {zh ? "禁用分享" : "Disable share"}
++                    </Button>
++                    <Button
++                      disabled={row.status !== "open"}
++                      onClick={async () => {
++                        await dispatch(
++                          send(`/admin/extensions/reports/${row.id}`, {
++                            method: "PATCH",
++                            data: { status: "dismissed" },
++                          }),
++                        );
++                        setGeneration((n) => n + 1);
++                      }}
++                    >
++                      {zh ? "忽略" : "Dismiss"}
++                    </Button>
++                  </TableCell>
++                )}
++              </TableRow>
++            ))}
++          </TableBody>
++        </Table>
++      </TableContainer>
++      <Stack direction="row" spacing={2}>
++        <Button onClick={() => setPage((p) => p - 1)} disabled={page === 1}>
++          {zh ? "上一页" : "Previous"}
++        </Button>
++        <Typography>
++          {page} / {Math.max(1, Math.ceil(result.total / 20))}
++        </Typography>
++        <Button onClick={() => setPage((p) => p + 1)} disabled={page * 20 >= result.total}>
++          {zh ? "下一页" : "Next"}
++        </Button>
++        <Button onClick={() => setGeneration((n) => n + 1)}>{zh ? "刷新" : "Refresh"}</Button>
++      </Stack>
++    </Stack>
++  );
++}
+diff --git a/src/component/Admin/Common/ExtensionSettings.tsx b/src/component/Admin/Common/ExtensionSettings.tsx
+new file mode 100644
+index 0000000..624a6f1
+--- /dev/null
++++ b/src/component/Admin/Common/ExtensionSettings.tsx
+@@ -0,0 +1,276 @@
++import { Box, Button, Checkbox, Divider, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { send } from "../../../api/request";
++import { useAppDispatch } from "../../../redux/hooks";
++import ExtensionRecords from "./ExtensionRecords";
++
++export default function ExtensionSettings({ section }: { section: "sso" | "commerce" | "audit" }) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const l = (cn: string, en: string) => (zh ? cn : en);
++  const [config, setConfig] = useState<any>();
++  const [busy, setBusy] = useState(false);
++  const [message, setMessage] = useState("");
++  useEffect(() => {
++    dispatch(send("/admin/extensions/config"))
++      .then(setConfig)
++      .catch(() => {});
++  }, [dispatch]);
++  if (!config) return <Typography>{l("正在加载…", "Loading…")}</Typography>;
++  const change = (provider: string, key: string, value: any) =>
++    setConfig((prev: any) => ({ ...prev, [provider]: { ...prev[provider], [key]: value } }));
++  const field = (provider: string, key: string, label: string, secret = false, multiline = false) => (
++    <TextField
++      key={key}
++      size="small"
++      label={label}
++      type={secret && !multiline ? "password" : "text"}
++      multiline={multiline}
++      minRows={multiline ? 3 : undefined}
++      autoComplete="off"
++      value={config[provider]?.[key] ?? ""}
++      onChange={(e) => change(provider, key, e.target.value)}
++    />
++  );
++  const save = async () => {
++    setBusy(true);
++    setMessage("");
++    try {
++      await dispatch(send("/admin/extensions/config", { method: "PUT", data: config }));
++      setMessage(l("已保存", "Saved"));
++    } finally {
++      setBusy(false);
++    }
++  };
++  return (
++    <Stack spacing={3} sx={{ maxWidth: 1000 }}>
++      {section === "sso" &&
++        ["qq", "logto"].map((provider) => (
++          <Stack spacing={2} key={provider}>
++            <Typography variant="h6">{provider === "qq" ? "QQ" : "Logto / OpenID Connect"}</Typography>
++            <FormControlLabel
++              control={
++                <Checkbox
++                  checked={!!config[provider]?.enabled}
++                  onChange={(e) => change(provider, "enabled", e.target.checked)}
++                />
++              }
++              label={l("启用登录", "Enable sign-in")}
++            />
++            {field(provider, "client_id", "Client ID / App ID")}
++            {field(provider, "client_secret", "Client secret / App key", true)}
++            {provider === "logto" && field(provider, "issuer", l("签发者地址", "Issuer URL"))}
++            <TextField
++              size="small"
++              label={l("回调地址", "Callback URL")}
++              value={`${window.location.origin}/api/v4/sso/${provider}/callback`}
++              slotProps={{ input: { readOnly: true } }}
++            />
++            <FormControlLabel
++              control={
++                <Checkbox
++                  checked={!!config[provider]?.allow_registration}
++                  onChange={(e) => change(provider, "allow_registration", e.target.checked)}
++                />
++              }
++              label={l(
++                "允许创建新账户（同时遵循全站注册开关）",
++                "Allow new accounts when site registration is enabled",
++              )}
++            />
++          </Stack>
++        ))}
++      {section === "commerce" && (
++        <>
++          {["alipay", "wechat"].map((provider) => (
++            <Stack spacing={2} key={provider}>
++              <Typography variant="h6">
++                {provider === "alipay" ? l("支付宝", "Alipay") : l("微信支付", "WeChat Pay")}
++              </Typography>
++              {field(provider, "app_id", "App ID")}
++              {field(
++                provider,
++                "merchant_id",
++                provider === "wechat" ? l("商户号", "Merchant ID") : l("卖家 ID", "Seller ID"),
++              )}
++              {field(provider, "private_key", l("商户私钥（PEM）", "Merchant private key (PEM)"), true, true)}
++              {field(
++                provider,
++                "public_key",
++                provider === "wechat"
++                  ? l("微信支付平台公钥或证书（PEM）", "WeChat platform public key or certificate (PEM)")
++                  : l("支付宝公钥（PEM）", "Alipay public key (PEM)"),
++                false,
++                true,
++              )}
++              {provider === "wechat" && (
++                <>
++                  {field(provider, "serial", l("商户证书序列号", "Merchant certificate serial"))}
++                  {field(
++                    provider,
++                    "platform_serial",
++                    l("平台公钥 ID 或证书序列号", "Platform key ID or certificate serial"),
++                  )}
++                  {field(provider, "api_key", "API v3 key", true)}
++                </>
++              )}
++              {provider === "alipay" && (
++                <FormControlLabel
++                  control={
++                    <Checkbox
++                      checked={!!config.alipay?.sandbox}
++                      onChange={(e) => change(provider, "sandbox", e.target.checked)}
++                    />
++                  }
++                  label={l("沙箱环境", "Sandbox")}
++                />
++              )}
++            </Stack>
++          ))}
++          <Divider />
++          <Typography variant="h6">
++            {l("商品（永久容量或用户组权益）", "Products (permanent storage or group benefits)")}
++          </Typography>
++          {(config.products ?? []).map((product: any, index: number) => (
++            <Stack key={index} spacing={1}>
++              {[
++                ["id", l("商品 ID", "Product ID")],
++                ["name", l("名称", "Name")],
++                ["amount", l("价格（人民币分）", "Price (CNY fen)")],
++                ["storage_bytes", l("永久容量（字节）", "Permanent storage (bytes)")],
++                ["group_id", l("用户组 ID（0 表示不更改）", "Group ID (0 keeps current group)")],
++              ].map(([key, label]) => (
++                <TextField
++                  key={key}
++                  size="small"
++                  label={label}
++                  type={["amount", "storage_bytes", "group_id"].includes(key) ? "number" : "text"}
++                  value={product[key] ?? ""}
++                  onChange={(e) =>
++                    setConfig((prev: any) => ({
++                      ...prev,
++                      products: prev.products.map((p: any, i: number) =>
++                        i === index
++                          ? {
++                              ...p,
++                              [key]: ["amount", "storage_bytes", "group_id"].includes(key)
++                                ? Number(e.target.value)
++                                : e.target.value,
++                            }
++                          : p,
++                      ),
++                    }))
++                  }
++                />
++              ))}
++              <Button
++                onClick={() =>
++                  setConfig((prev: any) => ({
++                    ...prev,
++                    products: prev.products.filter((_: any, i: number) => i !== index),
++                  }))
++                }
++              >
++                {l("删除商品", "Remove product")}
++              </Button>
++            </Stack>
++          ))}
++          <Button
++            onClick={() =>
++              setConfig((prev: any) => ({
++                ...prev,
++                products: [...(prev.products ?? []), { id: "", name: "", amount: 100, storage_bytes: 0, group_id: 0 }],
++              }))
++            }
++          >
++            {l("添加商品", "Add product")}
++          </Button>
++          <GiftCodeGenerator products={config.products ?? []} />
++        </>
++      )}
++      {section === "audit" && (
++        <>
++          <FormControlLabel
++            control={
++              <Checkbox checked={!!config.audit} onChange={(e) => setConfig({ ...config, audit: e.target.checked })} />
++            }
++            label={l("记录操作审计日志", "Record audit metadata")}
++          />
++          <ExtensionRecords kind="audit" />
++        </>
++      )}
++      <Box>
++        <Button variant="contained" onClick={save} disabled={busy}>
++          {l("保存", "Save")}
++        </Button>{" "}
++        <Typography component="span">{message}</Typography>
++      </Box>
++    </Stack>
++  );
++}
++
++function GiftCodeGenerator({ products }: { products: any[] }) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [product, setProduct] = useState("");
++  const [count, setCount] = useState(1);
++  const [days, setDays] = useState(30);
++  const [codes, setCodes] = useState<string[]>([]);
++  return (
++    <Stack spacing={2}>
++      <Typography variant="h6">{zh ? "兑换码" : "Gift codes"}</Typography>
++      <TextField
++        select
++        SelectProps={{ native: true }}
++        label={zh ? "已保存的商品" : "Saved product"}
++        value={product}
++        onChange={(e) => setProduct(e.target.value)}
++      >
++        <option value="" />
++        {products.map((p) => (
++          <option key={p.id} value={p.id}>
++            {p.name}
++          </option>
++        ))}
++      </TextField>
++      <TextField
++        type="number"
++        label={zh ? "数量（1–100）" : "Count (1–100)"}
++        value={count}
++        onChange={(e) => setCount(Number(e.target.value))}
++      />
++      <TextField
++        type="number"
++        label={zh ? "兑换有效期（天）" : "Redemption validity (days)"}
++        value={days}
++        onChange={(e) => setDays(Number(e.target.value))}
++      />
++      <Button
++        disabled={!product}
++        onClick={async () => {
++          const result = await dispatch(
++            send<{ codes: string[] }>("/admin/extensions/giftcodes", {
++              method: "POST",
++              data: { product, count, days },
++            }),
++          );
++          setCodes(result.codes);
++        }}
++      >
++        {zh ? "生成兑换码" : "Generate gift codes"}
++      </Button>
++      {!!codes.length && (
++        <TextField
++          multiline
++          minRows={3}
++          label={zh ? "请保存，完整兑换码仅显示一次" : "Save these codes; shown only once"}
++          value={codes.join("\n")}
++          slotProps={{ input: { readOnly: true } }}
++        />
++      )}
++    </Stack>
++  );
++}
+diff --git a/src/component/Admin/Group/EditGroup/AllowedPolicySelection.tsx b/src/component/Admin/Group/EditGroup/AllowedPolicySelection.tsx
+new file mode 100644
+index 0000000..dd03943
+--- /dev/null
++++ b/src/component/Admin/Group/EditGroup/AllowedPolicySelection.tsx
+@@ -0,0 +1,53 @@
++import { Checkbox, FormControlLabel, Stack, Typography } from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { getStoragePolicyList } from "../../../../api/api";
++import { StoragePolicy } from "../../../../api/dashboard";
++import { useAppDispatch } from "../../../../redux/hooks";
++
++export default function AllowedPolicySelection({
++  value,
++  onChange,
++  physicalOnly = false,
++}: {
++  value: number[];
++  onChange: (ids: number[]) => void;
++  physicalOnly?: boolean;
++}) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const [policies, setPolicies] = useState<StoragePolicy[]>([]);
++  useEffect(() => {
++    dispatch(getStoragePolicyList({ page: 1, page_size: 1000, order_by: "id", order_direction: "asc" })).then(
++      (result) => setPolicies(result.policies.filter((policy) => !physicalOnly || policy.type !== "load_balance")),
++    );
++  }, [dispatch, physicalOnly]);
++  return (
++    <Stack>
++      <Typography variant="body2">
++        {physicalOnly
++          ? i18n.language.startsWith("zh")
++            ? "负载均衡目标策略"
++            : "Load balancing destinations"
++          : i18n.language.startsWith("zh")
++            ? "用户可选的其他存储策略"
++            : "Additional policies users may select"}
++      </Typography>
++      {policies.map((policy) => (
++        <FormControlLabel
++          key={policy.id}
++          label={policy.name}
++          control={
++            <Checkbox
++              size="small"
++              checked={value.includes(policy.id)}
++              onChange={(e) =>
++                onChange(e.target.checked ? [...value, policy.id] : value.filter((id) => id !== policy.id))
++              }
++            />
++          }
++        />
++      ))}
++    </Stack>
++  );
++}
+diff --git a/src/component/Admin/StoragePolicy/Wizards/LoadBalanceWizard.tsx b/src/component/Admin/StoragePolicy/Wizards/LoadBalanceWizard.tsx
+new file mode 100644
+index 0000000..c300ac4
+--- /dev/null
++++ b/src/component/Admin/StoragePolicy/Wizards/LoadBalanceWizard.tsx
+@@ -0,0 +1,61 @@
++import { Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { getStoragePolicyList } from "../../../../api/api";
++import { StoragePolicy } from "../../../../api/dashboard";
++import { PolicyType } from "../../../../api/explorer";
++import { useAppDispatch } from "../../../../redux/hooks";
++import { AddWizardProps } from "../AddWizardDialog";
++
++export default function LoadBalanceWizard({ onSubmit }: AddWizardProps) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [name, setName] = useState("");
++  const [policies, setPolicies] = useState<StoragePolicy[]>([]);
++  const [selected, setSelected] = useState<number[]>([]);
++  useEffect(() => {
++    dispatch(getStoragePolicyList({ page: 1, page_size: 1000, order_by: "id", order_direction: "asc" })).then(
++      (result) => setPolicies(result.policies.filter((p) => p.type !== PolicyType.load_balance)),
++    );
++  }, [dispatch]);
++  return (
++    <Stack spacing={2}>
++      <TextField label={zh ? "名称" : "Name"} value={name} onChange={(e) => setName(e.target.value)} />
++      <Typography>
++        {zh
++          ? "新文件随机分配到所选策略；现有文件始终从原位置读取。"
++          : "New files are distributed across selected policies; existing files keep their original location."}
++      </Typography>
++      {policies.map((policy) => (
++        <FormControlLabel
++          key={policy.id}
++          label={policy.name}
++          control={
++            <Checkbox
++              checked={selected.includes(policy.id)}
++              onChange={(e) =>
++                setSelected((prev) => (e.target.checked ? [...prev, policy.id] : prev.filter((id) => id !== policy.id)))
++              }
++            />
++          }
++        />
++      ))}
++      <Button
++        variant="contained"
++        disabled={!name || !selected.length}
++        onClick={() =>
++          onSubmit({
++            name,
++            type: PolicyType.load_balance,
++            settings: { balanced_policies: selected },
++            dir_name_rule: "{uid}/{path}",
++            file_name_rule: "{name}",
++          } as StoragePolicy)
++        }
++      >
++        {zh ? "创建" : "Create"}
++      </Button>
++    </Stack>
++  );
++}
+diff --git a/src/component/FileManager/Explorer/PaidShareAccess.tsx b/src/component/FileManager/Explorer/PaidShareAccess.tsx
+new file mode 100644
+index 0000000..8e27155
+--- /dev/null
++++ b/src/component/FileManager/Explorer/PaidShareAccess.tsx
+@@ -0,0 +1,222 @@
++import { Alert, Button, CircularProgress, Stack, Typography } from "@mui/material";
++import { QRCodeSVG } from "qrcode.react";
++import { useContext, useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { useNavigate } from "react-router-dom";
++import { getShareInfo } from "../../../api/api";
++import { Share } from "../../../api/explorer";
++import { send } from "../../../api/request";
++import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
++import SessionManager from "../../../session";
++import CrUri from "../../../util/uri";
++import { FmIndexContext } from "../FmIndexContext";
++
++interface Checkout {
++  order: { number: string; amount: number; expires_at: string; provider: string };
++  url: string;
++}
++
++export default function PaidShareAccess() {
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const dispatch = useAppDispatch();
++  const navigate = useNavigate();
++  const index = useContext(FmIndexContext);
++  const path = useAppSelector((state) => state.fileManager[index].path);
++  const [info, setInfo] = useState<Share>();
++  const [providers, setProviders] = useState<{ alipay?: boolean; wechat?: boolean }>({});
++  const [checkout, setCheckout] = useState<Checkout>();
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState("");
++  const [expired, setExpired] = useState(false);
++  const signedIn = !!SessionManager.currentLoginOrNull();
++
++  useEffect(() => {
++    let active = true;
++    setInfo(undefined);
++    setCheckout(undefined);
++    setError("");
++    if (!path) return;
++    const uri = new CrUri(path);
++    Promise.all([
++      dispatch(getShareInfo(uri.id(), uri.password())),
++      dispatch(send<{ alipay?: boolean; wechat?: boolean }>("/extensions/public")),
++    ])
++      .then(([share, config]) => {
++        if (active) {
++          setInfo(share);
++          setProviders(config);
++        }
++      })
++      .catch((e) => {
++        if (active) setError(String(e.message ?? e));
++      });
++    return () => {
++      active = false;
++    };
++  }, [path, dispatch]);
++
++  useEffect(() => {
++    if (!checkout || !path) return;
++    let active = true;
++    let pending = false;
++    const timer = window.setInterval(async () => {
++      if (pending) return;
++      pending = true;
++      try {
++        const order = await dispatch(
++          send<{ status: string }>(`/commerce/orders/${encodeURIComponent(checkout.order.number)}`),
++        );
++        if (!active) return;
++        if (order.status === "fulfilled") {
++          window.clearInterval(timer);
++          const uri = new CrUri(path);
++          const share = await dispatch(getShareInfo(uri.id(), uri.password()));
++          if (!active) return;
++          if (share.purchased) window.location.reload();
++          else
++            setError(
++              zh
++                ? "款项已到账，但分享已变更。请联系站点管理员并提供订单号。"
++                : "Payment received, but the share has changed. Contact the site administrator with your order number.",
++            );
++        } else if (order.status === "cancelled" || Date.now() > Date.parse(checkout.order.expires_at)) {
++          window.clearInterval(timer);
++          setExpired(true);
++        }
++      } catch (e: any) {
++        if (active) setError(String(e.message ?? e));
++      } finally {
++        pending = false;
++      }
++    }, 4000);
++    return () => {
++      active = false;
++      window.clearInterval(timer);
++    };
++  }, [checkout, path, dispatch, zh]);
++
++  const buy = async (provider: string) => {
++    if (!path || !info) return;
++    setBusy(true);
++    setError("");
++    setExpired(false);
++    const uri = new CrUri(path);
++    try {
++      const result = await dispatch(
++        send<Checkout>("/commerce/share-orders", {
++          method: "POST",
++          data: { share_id: info.id, password: uri.password(), provider },
++        }),
++      );
++      setCheckout(result);
++    } catch (e: any) {
++      setError(String(e.message ?? e));
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  return (
++    <Stack
++      spacing={2}
++      alignItems="center"
++      sx={{ width: "100%", maxWidth: 540, maxHeight: "100%", overflow: "auto", p: 1 }}
++      onClick={(e) => e.stopPropagation()}
++      onMouseDown={(e) => e.stopPropagation()}
++    >
++      <Typography variant="h5">{zh ? "付款解锁分享" : "Unlock this share"}</Typography>
++      {info && (
++        <>
++          <Typography sx={{ overflowWrap: "anywhere" }}>{info.name}</Typography>
++          <Typography variant="h4">¥{(info.price / 100).toFixed(2)}</Typography>
++        </>
++      )}
++      {!info && !error && <CircularProgress size={24} />}
++      <Typography variant="body2" color="text.secondary">
++        {zh
++          ? "登录后一次付款，解锁该分享有效期内的内容。密码、有效期和下载次数限制仍然适用；款项由站点商户收取。"
++          : "Sign in and pay once for access while this share remains valid. Password, expiration and download limits still apply. The site merchant collects payment."}
++      </Typography>
++      {error && <Alert severity="error">{error}</Alert>}
++      {!signedIn ? (
++        <Button
++          variant="contained"
++          onClick={() =>
++            navigate("/session?redirect=" + encodeURIComponent(window.location.pathname + window.location.search))
++          }
++        >
++          {zh ? "登录后购买" : "Sign in to purchase"}
++        </Button>
++      ) : info?.purchased ? (
++        <Button variant="contained" onClick={() => window.location.reload()}>
++          {zh ? "已购买，刷新进入" : "Purchased — refresh to open"}
++        </Button>
++      ) : (
++        <>
++          {info && !providers.alipay && !providers.wechat && (
++            <Alert severity="warning">
++              {zh
++                ? "站点尚未配置支付渠道，请联系管理员。"
++                : "No payment provider is configured. Contact the administrator."}
++            </Alert>
++          )}
++          <Stack direction="row" spacing={1}>
++            {providers.alipay && (
++              <Button
++                disabled={busy || !info || (!!checkout && !expired)}
++                variant="contained"
++                onClick={() => buy("alipay")}
++              >
++                {zh ? "支付宝" : "Alipay"}
++              </Button>
++            )}
++            {providers.wechat && (
++              <Button
++                disabled={busy || !info || (!!checkout && !expired)}
++                variant="contained"
++                onClick={() => buy("wechat")}
++              >
++                {zh ? "微信支付" : "WeChat Pay"}
++              </Button>
++            )}
++          </Stack>
++        </>
++      )}
++      {checkout && (
++        <>
++          <Typography variant="body2">
++            {zh ? "订单金额" : "Order amount"} ¥{(checkout.order.amount / 100).toFixed(2)}
++          </Typography>
++          <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
++            {zh ? "订单号：" : "Order: "}
++            {checkout.order.number}
++          </Typography>
++          {!expired &&
++            (checkout.order.provider === "wechat" ? (
++              <>
++                <QRCodeSVG value={checkout.url} size={200} />
++                <Typography variant="body2">
++                  {zh ? "使用微信扫码支付，到账后自动解锁" : "Scan with WeChat; access unlocks after payment"}
++                </Typography>
++              </>
++            ) : (
++              <Button component="a" href={checkout.url} target="_blank" rel="noopener noreferrer" variant="outlined">
++                {zh ? "打开支付宝付款" : "Open Alipay checkout"}
++              </Button>
++            ))}
++          {expired && (
++            <Alert severity="warning">
++              {zh
++                ? "订单等待时间已结束。如已付款，请先检查支付结果，勿重复付款。"
++                : "The checkout has expired. If you paid, check the result before paying again."}
++            </Alert>
++          )}
++          <Button onClick={() => window.location.reload()}>
++            {zh ? "已付款，检查解锁状态" : "Paid — check access"}
++          </Button>
++        </>
++      )}
++    </Stack>
++  );
++}
+diff --git a/src/component/FileManager/Sidebar/Collaborators.tsx b/src/component/FileManager/Sidebar/Collaborators.tsx
+new file mode 100644
+index 0000000..0828aee
+--- /dev/null
++++ b/src/component/FileManager/Sidebar/Collaborators.tsx
+@@ -0,0 +1,226 @@
++import {
++  Alert,
++  Autocomplete,
++  Button,
++  Dialog,
++  DialogActions,
++  DialogContent,
++  DialogTitle,
++  MenuItem,
++  Stack,
++  TextField,
++  Typography,
++} from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { getSearchUser } from "../../../api/api";
++import { FileResponse, Metadata } from "../../../api/explorer";
++import { send } from "../../../api/request";
++import { User } from "../../../api/user";
++import { useAppDispatch } from "../../../redux/hooks";
++import SessionManager from "../../../session";
++import CrUri, { Filesystem } from "../../../util/uri";
++
++interface Member {
++  user_id: string;
++  nickname: string;
++  role: "viewer" | "editor";
++  inherited: boolean;
++  source_id: string;
++  source_name: string;
++}
++
++export default function Collaborators({ file }: { file: FileResponse }) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [open, setOpen] = useState(false);
++  const [members, setMembers] = useState<Member[]>([]);
++  const [keyword, setKeyword] = useState("");
++  const [options, setOptions] = useState<User[]>([]);
++  const [selected, setSelected] = useState<User | null>(null);
++  const [role, setRole] = useState<"viewer" | "editor">("viewer");
++  const [busy, setBusy] = useState(false);
++  const [ready, setReady] = useState(false);
++  const [error, setError] = useState("");
++  const uri = new CrUri(file.path);
++  const available =
++    file.owned &&
++    uri.fs() === Filesystem.my &&
++    !uri.is_root() &&
++    !file.metadata?.[Metadata.share_redirect] &&
++    !file.metadata?.[Metadata.restore_uri];
++
++  const load = async () => {
++    const result = await dispatch(send<{ items: Member[] }>("/file/permissions", { params: { uri: file.path } }));
++    setMembers(result.items);
++    setReady(true);
++  };
++
++  useEffect(() => {
++    setOpen(false);
++    setReady(false);
++    setSelected(null);
++    setOptions([]);
++    setKeyword("");
++  }, [file.path]);
++
++  useEffect(() => {
++    if (!open) return;
++    setBusy(true);
++    setError("");
++    setReady(false);
++    load()
++      .catch((e) => setError(String(e.message ?? e)))
++      .finally(() => setBusy(false));
++  }, [open, file.path]);
++
++  useEffect(() => {
++    setOptions([]);
++    if (!open || keyword.trim().length < 2) return;
++    let active = true;
++    const timer = window.setTimeout(() => {
++      dispatch(getSearchUser(keyword.trim()))
++        .then((users) => {
++          if (active) setOptions(users.filter((u) => u.id !== SessionManager.currentUser()?.id));
++        })
++        .catch(() => {});
++    }, 300);
++    return () => {
++      active = false;
++      window.clearTimeout(timer);
++    };
++  }, [keyword, open, dispatch]);
++
++  const save = async (userId: string, nextRole?: string) => {
++    setBusy(true);
++    setError("");
++    try {
++      await dispatch(
++        send("/file/permissions", {
++          method: nextRole ? "PUT" : "DELETE",
++          data: { uri: file.path, user_id: userId, role: nextRole },
++        }),
++      );
++      await load();
++      setSelected(null);
++      setKeyword("");
++    } catch (e: any) {
++      setError(String(e.message ?? e));
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  if (!available) return null;
++  const roleLabel = (value: string) => (value === "editor" ? (zh ? "可编辑" : "Editor") : zh ? "只读" : "Viewer");
++  return (
++    <>
++      <Button variant="outlined" onClick={() => setOpen(true)}>
++        {zh ? "权限与协作" : "Permissions & collaboration"}
++      </Button>
++      <Dialog
++        open={open}
++        onClose={() => {
++          if (!busy) setOpen(false);
++        }}
++        fullWidth
++        maxWidth="sm"
++      >
++        <DialogTitle>
++          {zh ? "权限与协作" : "Permissions & collaboration"} · {file.name}
++        </DialogTitle>
++        <DialogContent>
++          <Stack spacing={2} sx={{ pt: 1 }}>
++            <Alert severity="info">
++              {zh
++                ? "只读成员可以浏览和下载。可编辑成员还可以上传、修改、重命名、移动和移入回收站。文件夹权限由子项继承，多个授权取最高权限；删除直接授权不会取消从上级继承的权限。上传占用所有者容量，只有所有者可以管理成员。"
++                : "Viewers can browse and download. Editors can also upload, modify, rename, move and send items to trash. Folder grants apply to descendants; the highest grant wins. Removing a direct grant keeps inherited access. Uploads use the owner's quota. Only the owner manages members."}
++            </Alert>
++            {error && <Alert severity="error">{error}</Alert>}
++            <Typography variant="body2">
++              {zh ? "你是所有者，拥有完整控制权。" : "You are the owner and have full control."}
++            </Typography>
++            {ready && members.length === 0 && (
++              <Typography color="text.secondary">{zh ? "尚未添加协作成员" : "No collaborators yet"}</Typography>
++            )}
++            {members.map((member) => (
++              <Stack key={`${member.source_id}:${member.user_id}`} direction="row" spacing={1} alignItems="center">
++                <Stack sx={{ flex: 1, minWidth: 0 }}>
++                  <Typography sx={{ overflowWrap: "anywhere" }}>{member.nickname}</Typography>
++                  {member.inherited && (
++                    <Typography variant="caption" color="text.secondary">
++                      {zh
++                        ? `继承自「${member.source_name}」，请在上级管理`
++                        : `Inherited from “${member.source_name}”; manage on the parent`}
++                    </Typography>
++                  )}
++                </Stack>
++                <TextField
++                  select
++                  size="small"
++                  value={member.role}
++                  disabled={busy || member.inherited}
++                  label={zh ? "权限" : "Role"}
++                  sx={{ minWidth: 110 }}
++                  onChange={(e) => save(member.user_id, e.target.value)}
++                >
++                  <MenuItem value="viewer">{roleLabel("viewer")}</MenuItem>
++                  <MenuItem value="editor">{roleLabel("editor")}</MenuItem>
++                </TextField>
++                {!member.inherited && (
++                  <Button color="error" disabled={busy} onClick={() => save(member.user_id)}>
++                    {zh ? "撤销" : "Revoke"}
++                  </Button>
++                )}
++              </Stack>
++            ))}
++            <Autocomplete
++              options={options}
++              value={selected}
++              disabled={busy || !ready}
++              filterOptions={(items) => items}
++              getOptionLabel={(u) => u.nickname}
++              isOptionEqualToValue={(a, b) => a.id === b.id}
++              onInputChange={(_e, value, reason) => {
++                if (reason === "input") setKeyword(value);
++              }}
++              onChange={(_e, value) => setSelected(value)}
++              renderInput={(params) => (
++                <TextField
++                  {...params}
++                  label={zh ? "搜索注册用户（至少两个字符）" : "Find a registered user (2+ characters)"}
++                />
++              )}
++            />
++            <Stack direction="row" spacing={1}>
++              <TextField
++                select
++                label={zh ? "权限" : "Role"}
++                value={role}
++                disabled={busy}
++                sx={{ minWidth: 140 }}
++                onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
++              >
++                <MenuItem value="viewer">{roleLabel("viewer")}</MenuItem>
++                <MenuItem value="editor">{roleLabel("editor")}</MenuItem>
++              </TextField>
++              <Button
++                variant="contained"
++                disabled={busy || !ready || !selected}
++                onClick={() => selected && save(selected.id, role)}
++              >
++                {zh ? "添加或更新成员" : "Add or update member"}
++              </Button>
++            </Stack>
++          </Stack>
++        </DialogContent>
++        <DialogActions>
++          <Button disabled={busy} onClick={() => setOpen(false)}>
++            {zh ? "关闭" : "Close"}
++          </Button>
++        </DialogActions>
++      </Dialog>
++    </>
++  );
++}
+diff --git a/src/component/FileManager/Sidebar/CustomProps/UserPropsContent.tsx b/src/component/FileManager/Sidebar/CustomProps/UserPropsContent.tsx
+new file mode 100644
+index 0000000..2794901
+--- /dev/null
++++ b/src/component/FileManager/Sidebar/CustomProps/UserPropsContent.tsx
+@@ -0,0 +1,56 @@
++import { Autocomplete, TextField, Typography } from "@mui/material";
++import { useEffect, useState } from "react";
++import { getSearchUser, getUserInfo } from "../../../../api/api";
++import { User } from "../../../../api/user";
++import { useAppDispatch } from "../../../../redux/hooks";
++import { PropsContentProps } from "./CustomPropsItem";
++
++export default function UserPropsContent({ prop, onChange, loading, readOnly }: PropsContentProps) {
++  const dispatch = useAppDispatch();
++  const [keyword, setKeyword] = useState("");
++  const [users, setUsers] = useState<User[]>([]);
++  const [resolved, setResolved] = useState<User>();
++  useEffect(() => {
++    let active = true;
++    setResolved(undefined);
++    if (prop.value)
++      dispatch(getUserInfo(prop.value))
++        .then((user) => {
++          if (active) setResolved(user);
++        })
++        .catch(() => {});
++    return () => {
++      active = false;
++    };
++  }, [prop.value, dispatch]);
++  useEffect(() => {
++    if (keyword.length < 2) return;
++    let active = true;
++    const timer = window.setTimeout(() => {
++      dispatch(getSearchUser(keyword)).then((result) => {
++        if (active) setUsers(result);
++      });
++    }, 300);
++    return () => {
++      active = false;
++      window.clearTimeout(timer);
++    };
++  }, [keyword, dispatch]);
++  const selected = users.find((user) => user.id === prop.value) ?? (resolved?.id === prop.value ? resolved : undefined);
++  if (readOnly) return <Typography variant="body2">{selected?.nickname ?? prop.value}</Typography>;
++  return (
++    <Autocomplete
++      options={users}
++      filterOptions={(items) => items}
++      disabled={loading}
++      value={selected ?? (prop.value ? ({ id: prop.value, nickname: prop.value } as User) : null)}
++      getOptionLabel={(user) => user.nickname}
++      isOptionEqualToValue={(a, b) => a.id === b.id}
++      onInputChange={(_e, value, reason) => {
++        if (reason === "input") setKeyword(value);
++      }}
++      onChange={(_e, user) => onChange(user?.id ?? "")}
++      renderInput={(params) => <TextField {...params} size="small" placeholder="Search user" />}
++    />
++  );
++}
+diff --git a/src/component/Pages/Login/Signin/SSOLoginButtons.tsx b/src/component/Pages/Login/Signin/SSOLoginButtons.tsx
+new file mode 100644
+index 0000000..b41fc36
+--- /dev/null
++++ b/src/component/Pages/Login/Signin/SSOLoginButtons.tsx
+@@ -0,0 +1,98 @@
++import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from "@mui/material";
++import { useEffect, useRef, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { send2FALogin } from "../../../../api/api";
++import { AppError, Code, send } from "../../../../api/request";
++import { LoginResponse } from "../../../../api/user";
++import { useAppDispatch } from "../../../../redux/hooks";
++import { refreshUserSession } from "../../../../redux/thunks/session";
++
++export default function SSOLoginButtons({ onLoginSuccess }: { onLoginSuccess?: (response: LoginResponse) => void }) {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [providers, setProviders] = useState<any>({});
++  const [session, setSession] = useState("");
++  const [code, setCode] = useState("");
++  const [busy, setBusy] = useState(false);
++  const completed = useRef(false);
++  const success = (response: LoginResponse) =>
++    onLoginSuccess
++      ? onLoginSuccess(response)
++      : dispatch(refreshUserSession(response, new URLSearchParams(window.location.search).get("redirect")));
++  useEffect(() => {
++    dispatch(send("/extensions/public"))
++      .then(setProviders)
++      .catch(() => {});
++    if (new URLSearchParams(window.location.search).get("sso") === "1" && !completed.current) {
++      completed.current = true;
++      const url = new URL(window.location.href);
++      url.searchParams.delete("sso");
++      window.history.replaceState({}, "", url);
++      dispatch(send<LoginResponse>("/sso/complete", { method: "POST" }))
++        .then(success)
++        .catch((error) => {
++          if (error instanceof AppError && error.code === Code.Continue) setSession(error.response.data);
++        });
++    }
++  }, [dispatch]);
++  return (
++    <>
++      <Stack spacing={1}>
++        {["qq", "logto"]
++          .filter((p) => providers[p])
++          .map((provider) => (
++            <Button
++              key={provider}
++              disabled={busy}
++              variant="outlined"
++              onClick={async () => {
++                setBusy(true);
++                try {
++                  const result = await dispatch(
++                    send<{ url: string }>(`/sso/${provider}/start`, {
++                      method: "POST",
++                      data: { return_to: window.location.pathname + window.location.search },
++                    }),
++                  );
++                  window.location.assign(result.url);
++                } finally {
++                  setBusy(false);
++                }
++              }}
++            >
++              {provider === "qq" ? "QQ" : "Logto"} {zh ? "登录" : "sign-in"}
++            </Button>
++          ))}
++      </Stack>
++      <Dialog open={!!session}>
++        <DialogTitle>{zh ? "两步验证" : "Two-factor verification"}</DialogTitle>
++        <DialogContent>
++          <TextField
++            autoFocus
++            label={zh ? "验证码" : "Verification code"}
++            value={code}
++            onChange={(e) => setCode(e.target.value)}
++            inputProps={{ inputMode: "numeric" }}
++          />
++        </DialogContent>
++        <DialogActions>
++          <Button
++            disabled={busy}
++            onClick={async () => {
++              setBusy(true);
++              try {
++                success(await dispatch(send2FALogin({ session_id: session, otp: code })));
++                setSession("");
++              } finally {
++                setBusy(false);
++              }
++            }}
++          >
++            {zh ? "验证" : "Verify"}
++          </Button>
++        </DialogActions>
++      </Dialog>
++    </>
++  );
++}
+diff --git a/src/component/Pages/Shares/ShareSales.tsx b/src/component/Pages/Shares/ShareSales.tsx
+new file mode 100644
+index 0000000..3b1b3b9
+--- /dev/null
++++ b/src/component/Pages/Shares/ShareSales.tsx
+@@ -0,0 +1,163 @@
++import {
++  Alert,
++  Button,
++  Dialog,
++  DialogActions,
++  DialogContent,
++  DialogTitle,
++  Stack,
++  Table,
++  TableBody,
++  TableCell,
++  TableContainer,
++  TableHead,
++  TableRow,
++  Typography,
++} from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { send } from "../../../api/request";
++import { useAppDispatch } from "../../../redux/hooks";
++
++interface Sale {
++  number: string;
++  share_id: string;
++  buyer_id: string;
++  name: string;
++  amount: number;
++  status: string;
++  provider: string;
++  created_at: string;
++}
++interface Sales {
++  items: Sale[];
++  total: number;
++  paid_orders: number;
++  paid_amount: number;
++}
++
++export default function ShareSales() {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [open, setOpen] = useState(false);
++  const [page, setPage] = useState(1);
++  const [result, setResult] = useState<Sales>();
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState("");
++  const [refresh, setRefresh] = useState(0);
++  useEffect(() => {
++    if (!open) return;
++    let active = true;
++    setBusy(true);
++    setError("");
++    dispatch(send<Sales>("/commerce/share-sales", { params: { page, page_size: 20 } }))
++      .then((sales) => {
++        if (active) setResult(sales);
++      })
++      .catch((e) => {
++        if (active) setError(String(e.message ?? e));
++      })
++      .finally(() => {
++        if (active) setBusy(false);
++      });
++    return () => {
++      active = false;
++    };
++  }, [open, page, refresh, dispatch]);
++  const status = (value: string) =>
++    value === "fulfilled"
++      ? zh
++        ? "已付款"
++        : "Paid"
++      : value === "pending"
++        ? zh
++          ? "待付款"
++          : "Pending"
++        : value === "cancelled"
++          ? zh
++            ? "已取消"
++            : "Cancelled"
++          : value;
++  return (
++    <>
++      <Button
++        variant="outlined"
++        sx={{ mb: 2 }}
++        onClick={() => {
++          setPage(1);
++          setOpen(true);
++        }}
++      >
++        {zh ? "收费分享销售订单" : "Paid share sales"}
++      </Button>
++      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="lg">
++        <DialogTitle>{zh ? "收费分享销售订单" : "Paid share sales"}</DialogTitle>
++        <DialogContent>
++          <Stack spacing={2}>
++            <Alert severity="info">
++              {zh
++                ? "款项由站点配置的支付商户收取。以下为销售记录，不代表可提现余额；当前不自动分账或退款。"
++                : "The configured site merchant collects payment. These are sales records, not a withdrawable balance. Automatic payouts and refunds are not available."}
++            </Alert>
++            {error && <Alert severity="error">{error}</Alert>}
++            {result && (
++              <Typography>
++                {zh ? "已收款合计" : "Total collected"} ¥{(result.paid_amount / 100).toFixed(2)} · {result.paid_orders}{" "}
++                {zh ? "笔已付款订单" : "paid orders"}
++              </Typography>
++            )}
++            <TableContainer>
++              <Table size="small">
++                <TableHead>
++                  <TableRow>
++                    <TableCell>{zh ? "分享 / 订单号" : "Share / order"}</TableCell>
++                    <TableCell>{zh ? "买家" : "Buyer"}</TableCell>
++                    <TableCell>{zh ? "金额" : "Amount"}</TableCell>
++                    <TableCell>{zh ? "状态" : "Status"}</TableCell>
++                    <TableCell>{zh ? "时间" : "Created"}</TableCell>
++                  </TableRow>
++                </TableHead>
++                <TableBody>
++                  {result?.items.map((sale) => (
++                    <TableRow key={sale.number}>
++                      <TableCell>
++                        <Typography variant="body2">{sale.name}</Typography>
++                        <Typography variant="caption">{sale.number}</Typography>
++                      </TableCell>
++                      <TableCell>{sale.buyer_id}</TableCell>
++                      <TableCell>
++                        ¥{(sale.amount / 100).toFixed(2)}
++                        <Typography variant="caption" display="block">
++                          {sale.provider === "wechat" ? (zh ? "微信支付" : "WeChat Pay") : zh ? "支付宝" : "Alipay"}
++                        </Typography>
++                      </TableCell>
++                      <TableCell>{status(sale.status)}</TableCell>
++                      <TableCell>{new Date(sale.created_at).toLocaleString()}</TableCell>
++                    </TableRow>
++                  ))}
++                </TableBody>
++              </Table>
++            </TableContainer>
++            {result?.total === 0 && (
++              <Typography color="text.secondary">{zh ? "暂无销售订单" : "No sales yet"}</Typography>
++            )}
++          </Stack>
++        </DialogContent>
++        <DialogActions>
++          <Button disabled={busy} onClick={() => setRefresh((value) => value + 1)}>
++            {zh ? "刷新" : "Refresh"}
++          </Button>
++          <Button disabled={busy || page <= 1} onClick={() => setPage((value) => value - 1)}>
++            {zh ? "上一页" : "Previous"}
++          </Button>
++          <Typography>{page}</Typography>
++          <Button disabled={busy || !result || page * 20 >= result.total} onClick={() => setPage((value) => value + 1)}>
++            {zh ? "下一页" : "Next"}
++          </Button>
++          <Button onClick={() => setOpen(false)}>{zh ? "关闭" : "Close"}</Button>
++        </DialogActions>
++      </Dialog>
++    </>
++  );
++}
+diff --git a/src/component/Pages/Shop.tsx b/src/component/Pages/Shop.tsx
+new file mode 100644
+index 0000000..6164502
+--- /dev/null
++++ b/src/component/Pages/Shop.tsx
+@@ -0,0 +1,143 @@
++import {
++  Button,
++  Card,
++  CardContent,
++  Container,
++  Dialog,
++  DialogContent,
++  DialogTitle,
++  Stack,
++  TextField,
++  Typography,
++} from "@mui/material";
++import { QRCodeSVG } from "qrcode.react";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { send } from "../../api/request";
++import { useAppDispatch } from "../../redux/hooks";
++import StoragePolicySelector from "./StoragePolicySelector";
++
++export default function Shop() {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [config, setConfig] = useState<any>({ products: [] });
++  const [orders, setOrders] = useState<any[]>([]);
++  const [checkout, setCheckout] = useState<any>();
++  const [code, setCode] = useState("");
++  const [busy, setBusy] = useState(false);
++  const [message, setMessage] = useState("");
++  const load = () => dispatch(send<{ items: any[] }>("/commerce/orders")).then((result) => setOrders(result.items));
++  useEffect(() => {
++    dispatch(send("/extensions/public")).then(setConfig);
++    load();
++  }, [dispatch]);
++  useEffect(() => {
++    if (!checkout) return;
++    const timer = window.setInterval(async () => {
++      const result = await dispatch(send<{ items: any[] }>("/commerce/orders"));
++      setOrders(result.items);
++      if (result.items.some((order) => order.number === checkout.order.number && order.status === "fulfilled")) {
++        setCheckout(undefined);
++        setMessage(zh ? "支付成功，权益已到账" : "Payment received and benefits applied");
++      }
++    }, 4000);
++    return () => window.clearInterval(timer);
++  }, [checkout, dispatch, zh]);
++  const buy = async (product: string, provider: string) => {
++    setBusy(true);
++    try {
++      const result = await dispatch(send<any>("/commerce/orders", { method: "POST", data: { product, provider } }));
++      setCheckout(result);
++      await load();
++    } finally {
++      setBusy(false);
++    }
++  };
++  return (
++    <Container sx={{ py: 4 }}>
++      <Stack spacing={3}>
++        <Typography variant="h4">{zh ? "商店与兑换" : "Shop and gift codes"}</Typography>
++        <StoragePolicySelector />
++        <Stack direction="row" spacing={2}>
++          {["qq", "logto"]
++            .filter((provider) => config[provider])
++            .map((provider) => (
++              <Button
++                key={provider}
++                onClick={async () => {
++                  const result = await dispatch(
++                    send<{ url: string }>(`/sso/${provider}/start?link=1`, { method: "POST" }),
++                  );
++                  window.location.assign(result.url);
++                }}
++              >
++                {zh ? "绑定" : "Link"} {provider === "qq" ? "QQ" : "Logto"}
++              </Button>
++            ))}
++        </Stack>
++        {config.products?.map((p: any) => (
++          <Card key={p.id}>
++            <CardContent>
++              <Stack spacing={2}>
++                <Typography variant="h6">{p.name}</Typography>
++                <Typography>¥{(p.amount / 100).toFixed(2)}</Typography>
++                <Stack direction="row" spacing={2}>
++                  {config.alipay && (
++                    <Button disabled={busy} onClick={() => buy(p.id, "alipay")}>
++                      {zh ? "支付宝" : "Alipay"}
++                    </Button>
++                  )}
++                  {config.wechat && (
++                    <Button disabled={busy} onClick={() => buy(p.id, "wechat")}>
++                      {zh ? "微信支付" : "WeChat Pay"}
++                    </Button>
++                  )}
++                </Stack>
++              </Stack>
++            </CardContent>
++          </Card>
++        ))}
++        <TextField label={zh ? "兑换码" : "Gift code"} value={code} onChange={(e) => setCode(e.target.value)} />
++        <Button
++          disabled={busy || !code}
++          onClick={async () => {
++            setBusy(true);
++            try {
++              await dispatch(send("/commerce/redeem", { method: "POST", data: { code } }));
++              setCode("");
++              setMessage(zh ? "兑换成功" : "Gift code redeemed");
++            } finally {
++              setBusy(false);
++            }
++          }}
++        >
++          {zh ? "兑换" : "Redeem"}
++        </Button>
++        <Typography>{message}</Typography>
++        <Typography variant="h6">{zh ? "最近订单" : "Recent orders"}</Typography>
++        {orders.map((order) => (
++          <Typography key={order.id}>
++            {order.product_name} · ¥{(order.amount / 100).toFixed(2)} · {order.status}
++          </Typography>
++        ))}
++        <Button onClick={load}>{zh ? "刷新订单" : "Refresh orders"}</Button>
++      </Stack>
++      <Dialog open={!!checkout} onClose={() => setCheckout(undefined)}>
++        <DialogTitle>{zh ? "完成支付" : "Complete payment"}</DialogTitle>
++        <DialogContent>
++          {checkout?.url?.startsWith("weixin://") ? (
++            <QRCodeSVG value={checkout.url} size={240} />
++          ) : (
++            <Button variant="contained" href={checkout?.url} target="_blank" rel="noopener noreferrer">
++              {zh ? "打开支付宝收银台" : "Open Alipay checkout"}
++            </Button>
++          )}
++          <Typography sx={{ mt: 2 }}>
++            {zh ? "支付完成后，此页面将自动更新。" : "This page updates after payment confirmation."}
++          </Typography>
++        </DialogContent>
++      </Dialog>
++    </Container>
++  );
++}
+diff --git a/src/component/Pages/StoragePolicySelector.tsx b/src/component/Pages/StoragePolicySelector.tsx
+new file mode 100644
+index 0000000..c66a849
+--- /dev/null
++++ b/src/component/Pages/StoragePolicySelector.tsx
+@@ -0,0 +1,49 @@
++import { Button, MenuItem, Stack, TextField } from "@mui/material";
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { send } from "../../api/request";
++import { useAppDispatch } from "../../redux/hooks";
++
++export default function StoragePolicySelector() {
++  const dispatch = useAppDispatch();
++  const { i18n } = useTranslation();
++  const zh = i18n.language.startsWith("zh");
++  const [policies, setPolicies] = useState<any[]>([]);
++  const [selected, setSelected] = useState(0);
++  const [saved, setSaved] = useState(false);
++  useEffect(() => {
++    dispatch(send<any>("/storage/policies")).then((result) => {
++      setPolicies(result.items);
++      setSelected(result.selected);
++    });
++  }, [dispatch]);
++  return (
++    <Stack direction="row" spacing={2}>
++      <TextField
++        select
++        label={zh ? "新上传文件的存储策略" : "Storage policy for new uploads"}
++        value={selected}
++        onChange={(e) => {
++          setSelected(Number(e.target.value));
++          setSaved(false);
++        }}
++        sx={{ minWidth: 240 }}
++      >
++        <MenuItem value={0}>{zh ? "用户组默认" : "Group default"}</MenuItem>
++        {policies.map((p) => (
++          <MenuItem key={p.id} value={p.id}>
++            {p.name}
++          </MenuItem>
++        ))}
++      </TextField>
++      <Button
++        onClick={async () => {
++          await dispatch(send("/storage/policies", { method: "PATCH", data: { id: selected } }));
++          setSaved(true);
++        }}
++      >
++        {saved ? (zh ? "已保存" : "Saved") : zh ? "保存" : "Save"}
++      </Button>
++    </Stack>
++  );
++}

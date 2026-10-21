@@ -1,14 +1,15 @@
 package constants
 
-// These values will be injected at build time, DO NOT EDIT.
+// BackendVersion and LastCommit are injected at build time.
 
 // BackendVersion 当前后端版本号
 var BackendVersion = "4.14.0"
 
-// IsPro 是否为Pro版本
-var IsPro = "false"
+// Edition metadata is always Pro. Feature configuration is managed separately.
+// Keep these identifiers for API and frontend compatibility.
+const IsPro = "true"
 
-var IsProBool = IsPro == "true"
+const IsProBool = true
 
 // LastCommit 最后commit id
 var LastCommit = "000000"

@@ -62,11 +62,10 @@ func WithServerStaticFS(c static.ServeFileSystem) Option {
 	})
 }
 
-// WithProFlag Set if current instance is a pro version.
-func WithProFlag(c bool) Option {
-	return optionFunc(func(o *dependency) {
-		o.isPro = c
-	})
+// WithProFlag is retained for compatibility. Edition flags no longer restrict features.
+// Deprecated: all builds expose the same available features.
+func WithProFlag(_ bool) Option {
+	return optionFunc(func(_ *dependency) {})
 }
 
 // WithRawEntClient Set the default raw ent client.

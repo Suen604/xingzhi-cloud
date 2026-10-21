@@ -333,6 +333,8 @@ type Share struct {
 	Url               string          `json:"url"`
 	ShowReadMe        bool            `json:"show_readme,omitempty"`
 	Size              int64           `json:"size"`
+	Price             int64           `json:"price"`
+	Purchased         bool            `json:"purchased"`
 
 	// Only viewable by owner
 	IsPrivate bool   `json:"is_private,omitempty"`
@@ -360,6 +362,8 @@ func BuildShare(ctx context.Context, s *ent.Share, base *url.URL, hasher hashid.
 		Visited:           s.Views,
 		SourceType:        util.ToPtr(t),
 		PasswordProtected: s.Password != "",
+		Price:             s.Price,
+		Purchased:         s.Price == 0 || requester.ID == owner.ID,
 	}
 
 	if unlocked {

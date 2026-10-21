@@ -62,6 +62,8 @@ When you're ready to deploy Cloudreve to a production environment, you can refer
 
 Please refer to [Build](https://docs.cloudreve.org/overview/build/) for how to build Cloudreve from source code.
 
+This branch exposes a unified edition flag and requires no license key. See [feature implementation notes](docs/FEATURES.md) for implemented features, provider configuration, and remaining placeholders. Frontend changes are retained in `.build/assets-features.patch` and applied by the asset build script.
+
 ## :rocket: Contributing
 
 If you're interested in contributing to Cloudreve, please refer to [Contributing](https://docs.cloudreve.org/api/contributing/) for how to contribute to Cloudreve.

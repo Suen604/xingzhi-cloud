@@ -689,6 +689,7 @@ var DefaultSettings = map[string]string{
 }
 
 var RedactedSettings = map[string]struct{}{
+	"extensions_config":  {},
 	"encrypt_master_key": {},
 	"secret_key":         {},
 }

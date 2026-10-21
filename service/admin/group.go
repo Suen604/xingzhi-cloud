@@ -2,12 +2,14 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/cloudreve/Cloudreve/v4/application/dependency"
 	"github.com/cloudreve/Cloudreve/v4/ent"
 	"github.com/cloudreve/Cloudreve/v4/inventory"
 	"github.com/cloudreve/Cloudreve/v4/inventory/types"
+	"github.com/cloudreve/Cloudreve/v4/pkg/filemanager/fs"
 	"github.com/cloudreve/Cloudreve/v4/pkg/serializer"
 	"github.com/gin-gonic/gin"
 )
@@ -153,6 +155,9 @@ type (
 )
 
 func (s *UpsertGroupService) Update(c *gin.Context) (*GetGroupResponse, error) {
+	if err := validateExtendedGroupSettings(c, s.Group); err != nil {
+		return nil, serializer.NewError(serializer.CodeParamErr, "Invalid group settings", err)
+	}
 	dep := dependency.FromContext(c)
 	groupClient := dep.GroupClient()
 
@@ -175,6 +180,9 @@ func (s *UpsertGroupService) Update(c *gin.Context) (*GetGroupResponse, error) {
 }
 
 func (s *UpsertGroupService) Create(c *gin.Context) (*GetGroupResponse, error) {
+	if err := validateExtendedGroupSettings(c, s.Group); err != nil {
+		return nil, serializer.NewError(serializer.CodeParamErr, "Invalid group settings", err)
+	}
 	dep := dependency.FromContext(c)
 	groupClient := dep.GroupClient()
 
@@ -189,4 +197,32 @@ func (s *UpsertGroupService) Create(c *gin.Context) (*GetGroupResponse, error) {
 
 	service := &SingleGroupService{ID: group.ID}
 	return service.Get(c)
+}
+
+func validateExtendedGroupSettings(c *gin.Context, group *ent.Group) error {
+	if group == nil || group.Permissions == nil {
+		return fmt.Errorf("group and permissions are required")
+	}
+	if group.Settings == nil {
+		return nil
+	}
+	if len(group.Settings.AllowedPolicies) > 100 || len(group.Settings.DefaultPinned) > 100 {
+		return fmt.Errorf("too many policies or default pinned entries")
+	}
+	seen := map[int]bool{}
+	for _, id := range group.Settings.AllowedPolicies {
+		if id <= 0 || seen[id] {
+			return fmt.Errorf("invalid or duplicate policy")
+		}
+		if _, err := dependency.FromContext(c).StoragePolicyClient().GetPolicyByID(c, id); err != nil {
+			return fmt.Errorf("policy %d does not exist", id)
+		}
+		seen[id] = true
+	}
+	for _, pin := range group.Settings.DefaultPinned {
+		if _, err := fs.NewUriFromString(pin.Uri); err != nil {
+			return fmt.Errorf("invalid default pinned URI")
+		}
+	}
+	return nil
 }

@@ -27,6 +27,7 @@ func (User) Fields() []ent.Field {
 			Default("active"),
 		field.Int64("storage").
 			Default(0),
+		field.Int64("extra_storage").Default(0).NonNegative(),
 		field.String("two_factor_secret").
 			Sensitive().
 			Optional(),

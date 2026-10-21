@@ -145,6 +145,10 @@ func Logging() gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
+		// Authorization codes and state values must not enter request logs.
+		if strings.HasPrefix(path, constants.APIPrefix+"/sso/") {
+			raw = ""
+		}
 
 		// Process request
 		c.Next()

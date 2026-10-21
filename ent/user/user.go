@@ -33,6 +33,8 @@ const (
 	FieldStatus = "status"
 	// FieldStorage holds the string denoting the storage field in the database.
 	FieldStorage = "storage"
+	// FieldExtraStorage holds the string denoting the extra_storage field in the database.
+	FieldExtraStorage = "extra_storage"
 	// FieldTwoFactorSecret holds the string denoting the two_factor_secret field in the database.
 	FieldTwoFactorSecret = "two_factor_secret"
 	// FieldAvatar holds the string denoting the avatar field in the database.
@@ -137,6 +139,7 @@ var Columns = []string{
 	FieldPassword,
 	FieldStatus,
 	FieldStorage,
+	FieldExtraStorage,
 	FieldTwoFactorSecret,
 	FieldAvatar,
 	FieldSettings,
@@ -173,6 +176,10 @@ var (
 	NickValidator func(string) error
 	// DefaultStorage holds the default value on creation for the "storage" field.
 	DefaultStorage int64
+	// DefaultExtraStorage holds the default value on creation for the "extra_storage" field.
+	DefaultExtraStorage int64
+	// ExtraStorageValidator is a validator for the "extra_storage" field. It is called by the builders before save.
+	ExtraStorageValidator func(int64) error
 	// DefaultSettings holds the default value on creation for the "settings" field.
 	DefaultSettings *types.UserSetting
 )
@@ -251,6 +258,11 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByStorage orders the results by the storage field.
 func ByStorage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStorage, opts...).ToFunc()
+}
+
+// ByExtraStorage orders the results by the extra_storage field.
+func ByExtraStorage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExtraStorage, opts...).ToFunc()
 }
 
 // ByTwoFactorSecret orders the results by the two_factor_secret field.

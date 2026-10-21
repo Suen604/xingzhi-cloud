@@ -67,6 +67,20 @@ func (sc *ShareCreate) SetNillableDeletedAt(t *time.Time) *ShareCreate {
 	return sc
 }
 
+// SetPrice sets the "price" field.
+func (sc *ShareCreate) SetPrice(i int64) *ShareCreate {
+	sc.mutation.SetPrice(i)
+	return sc
+}
+
+// SetNillablePrice sets the "price" field if the given value is not nil.
+func (sc *ShareCreate) SetNillablePrice(i *int64) *ShareCreate {
+	if i != nil {
+		sc.SetPrice(*i)
+	}
+	return sc
+}
+
 // SetPassword sets the "password" field.
 func (sc *ShareCreate) SetPassword(s string) *ShareCreate {
 	sc.mutation.SetPassword(s)
@@ -232,6 +246,10 @@ func (sc *ShareCreate) defaults() error {
 		v := share.DefaultUpdatedAt()
 		sc.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := sc.mutation.Price(); !ok {
+		v := share.DefaultPrice
+		sc.mutation.SetPrice(v)
+	}
 	if _, ok := sc.mutation.Views(); !ok {
 		v := share.DefaultViews
 		sc.mutation.SetViews(v)
@@ -250,6 +268,14 @@ func (sc *ShareCreate) check() error {
 	}
 	if _, ok := sc.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Share.updated_at"`)}
+	}
+	if _, ok := sc.mutation.Price(); !ok {
+		return &ValidationError{Name: "price", err: errors.New(`ent: missing required field "Share.price"`)}
+	}
+	if v, ok := sc.mutation.Price(); ok {
+		if err := share.PriceValidator(v); err != nil {
+			return &ValidationError{Name: "price", err: fmt.Errorf(`ent: validator failed for field "Share.price": %w`, err)}
+		}
 	}
 	if _, ok := sc.mutation.Views(); !ok {
 		return &ValidationError{Name: "views", err: errors.New(`ent: missing required field "Share.views"`)}
@@ -302,6 +328,10 @@ func (sc *ShareCreate) createSpec() (*Share, *sqlgraph.CreateSpec) {
 	if value, ok := sc.mutation.DeletedAt(); ok {
 		_spec.SetField(share.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
+	}
+	if value, ok := sc.mutation.Price(); ok {
+		_spec.SetField(share.FieldPrice, field.TypeInt64, value)
+		_node.Price = value
 	}
 	if value, ok := sc.mutation.Password(); ok {
 		_spec.SetField(share.FieldPassword, field.TypeString, value)
@@ -440,6 +470,24 @@ func (u *ShareUpsert) UpdateDeletedAt() *ShareUpsert {
 // ClearDeletedAt clears the value of the "deleted_at" field.
 func (u *ShareUpsert) ClearDeletedAt() *ShareUpsert {
 	u.SetNull(share.FieldDeletedAt)
+	return u
+}
+
+// SetPrice sets the "price" field.
+func (u *ShareUpsert) SetPrice(v int64) *ShareUpsert {
+	u.Set(share.FieldPrice, v)
+	return u
+}
+
+// UpdatePrice sets the "price" field to the value that was provided on create.
+func (u *ShareUpsert) UpdatePrice() *ShareUpsert {
+	u.SetExcluded(share.FieldPrice)
+	return u
+}
+
+// AddPrice adds v to the "price" field.
+func (u *ShareUpsert) AddPrice(v int64) *ShareUpsert {
+	u.Add(share.FieldPrice, v)
 	return u
 }
 
@@ -634,6 +682,27 @@ func (u *ShareUpsertOne) UpdateDeletedAt() *ShareUpsertOne {
 func (u *ShareUpsertOne) ClearDeletedAt() *ShareUpsertOne {
 	return u.Update(func(s *ShareUpsert) {
 		s.ClearDeletedAt()
+	})
+}
+
+// SetPrice sets the "price" field.
+func (u *ShareUpsertOne) SetPrice(v int64) *ShareUpsertOne {
+	return u.Update(func(s *ShareUpsert) {
+		s.SetPrice(v)
+	})
+}
+
+// AddPrice adds v to the "price" field.
+func (u *ShareUpsertOne) AddPrice(v int64) *ShareUpsertOne {
+	return u.Update(func(s *ShareUpsert) {
+		s.AddPrice(v)
+	})
+}
+
+// UpdatePrice sets the "price" field to the value that was provided on create.
+func (u *ShareUpsertOne) UpdatePrice() *ShareUpsertOne {
+	return u.Update(func(s *ShareUpsert) {
+		s.UpdatePrice()
 	})
 }
 
@@ -1018,6 +1087,27 @@ func (u *ShareUpsertBulk) UpdateDeletedAt() *ShareUpsertBulk {
 func (u *ShareUpsertBulk) ClearDeletedAt() *ShareUpsertBulk {
 	return u.Update(func(s *ShareUpsert) {
 		s.ClearDeletedAt()
+	})
+}
+
+// SetPrice sets the "price" field.
+func (u *ShareUpsertBulk) SetPrice(v int64) *ShareUpsertBulk {
+	return u.Update(func(s *ShareUpsert) {
+		s.SetPrice(v)
+	})
+}
+
+// AddPrice adds v to the "price" field.
+func (u *ShareUpsertBulk) AddPrice(v int64) *ShareUpsertBulk {
+	return u.Update(func(s *ShareUpsert) {
+		s.AddPrice(v)
+	})
+}
+
+// UpdatePrice sets the "price" field to the value that was provided on create.
+func (u *ShareUpsertBulk) UpdatePrice() *ShareUpsertBulk {
+	return u.Update(func(s *ShareUpsert) {
+		s.UpdatePrice()
 	})
 }
 

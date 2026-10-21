@@ -21,6 +21,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
 	FieldDeletedAt = "deleted_at"
+	// FieldPrice holds the string denoting the price field in the database.
+	FieldPrice = "price"
 	// FieldPassword holds the string denoting the password field in the database.
 	FieldPassword = "password"
 	// FieldViews holds the string denoting the views field in the database.
@@ -61,6 +63,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldDeletedAt,
+	FieldPrice,
 	FieldPassword,
 	FieldViews,
 	FieldDownloads,
@@ -105,6 +108,10 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultPrice holds the default value on creation for the "price" field.
+	DefaultPrice int64
+	// PriceValidator is a validator for the "price" field. It is called by the builders before save.
+	PriceValidator func(int64) error
 	// DefaultViews holds the default value on creation for the "views" field.
 	DefaultViews int
 	// DefaultDownloads holds the default value on creation for the "downloads" field.
@@ -132,6 +139,11 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByDeletedAt orders the results by the deleted_at field.
 func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDeletedAt, opts...).ToFunc()
+}
+
+// ByPrice orders the results by the price field.
+func ByPrice(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPrice, opts...).ToFunc()
 }
 
 // ByPassword orders the results by the password field.

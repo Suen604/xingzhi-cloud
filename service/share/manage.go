@@ -27,6 +27,7 @@ type (
 		Expire          int    `json:"expire"`
 		ShareView       bool   `json:"share_view"`
 		ShowReadMe      bool   `json:"show_readme"`
+		Price           *int64 `json:"price" binding:"omitempty,min=0,max=100000000"`
 	}
 	ShareCreateParamCtx struct{}
 
@@ -90,6 +91,7 @@ func (service *ShareCreateService) Upsert(c *gin.Context, existed int) (string, 
 		ExistedShareID:  existed,
 		ShareView:       service.ShareView,
 		ShowReadMe:      service.ShowReadMe,
+		Price:           service.Price,
 	})
 	if err != nil {
 		return "", err

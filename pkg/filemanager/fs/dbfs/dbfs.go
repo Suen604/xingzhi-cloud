@@ -236,8 +236,8 @@ func (f *DBFS) Capacity(ctx context.Context, u *ent.User) (*fs.Capacity, error) 
 		return nil, serializer.NewError(serializer.CodeDBError, "Failed to get user's group", err)
 	}
 
-	res.Used = f.user.Storage
-	res.Total = requesterGroup.MaxStorage
+	res.Used = u.Storage
+	res.Total = requesterGroup.MaxStorage + u.ExtraStorage
 	return res, nil
 }
 
@@ -451,7 +451,7 @@ func (f *DBFS) Get(ctx context.Context, path *fs.URI, opts ...fs.Option) (fs.Fil
 
 	// Calculate folder summary if requested
 	if o.loadFolderSummary && target != nil && target.Type() == types.FileTypeFolder {
-		if _, ok := ctx.Value(ByPassOwnerCheckCtxKey{}).(bool); !ok && target.OwnerID() != f.user.ID {
+		if !f.canRead(ctx, target) {
 			return nil, fs.ErrOwnerOnly
 		}
 
@@ -547,7 +547,7 @@ func (f *DBFS) Walk(ctx context.Context, path *fs.URI, depth int, walk fs.WalkFu
 	}
 
 	// Require Read permission
-	if _, ok := ctx.Value(ByPassOwnerCheckCtxKey{}).(bool); !ok && target.OwnerID() != f.user.ID {
+	if !f.canRead(ctx, target) {
 		return fs.ErrOwnerOnly
 	}
 
@@ -678,6 +678,25 @@ func (f *DBFS) getPreferredPolicy(ctx context.Context, file *File) (*ent.Storage
 		return nil, serializer.NewError(serializer.CodeDBError, "Failed to get available storage policies", err)
 	}
 
+	if owner := file.Owner(); owner.Settings != nil && owner.Settings.PreferredStoragePolicy > 0 && ownerGroup.Settings != nil {
+		preferred := owner.Settings.PreferredStoragePolicy
+		allowed := preferred == groupPolicy.ID
+		for _, id := range ownerGroup.Settings.AllowedPolicies {
+			if id == preferred {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			groupPolicy, err = sc.GetPolicyByID(ctx, preferred)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if groupPolicy.Type == types.PolicyTypeLoadBalance {
+		return sc.ResolveBalancedPolicy(ctx, groupPolicy)
+	}
 	return groupPolicy, nil
 }
 
@@ -761,6 +780,13 @@ func (f *DBFS) getNavigator(ctx context.Context, path *fs.URI, requiredCapabilit
 	}
 
 	// Check fs capabilities
+	// Resolve cross-owner My paths before checking their dynamic permissions.
+	// To also validates live grants when restoring a cached navigation tree.
+	if pathFs == constants.FileSystemMy && path.ID(hashid.EncodeUserID(f.hasher, f.user.ID)) != hashid.EncodeUserID(f.hasher, f.user.ID) {
+		if _, err := res.To(ctx, path); err != nil && !ent.IsNotFound(err) {
+			return nil, err
+		}
+	}
 	capabilities := res.Capabilities(false).Capability
 	for _, capability := range requiredCapabilities {
 		if !capabilities.Enabled(int(capability)) {

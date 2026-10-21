@@ -2,6 +2,8 @@
 set -e
 export NODE_OPTIONS="--max-old-space-size=8192"
 
+bash "$(dirname "$0")/apply-assets-patch.sh"
+
 # This script is used to build the assets for the application.
 cd assets
 rm -rf build

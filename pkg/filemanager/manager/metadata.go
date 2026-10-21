@@ -166,6 +166,19 @@ var (
 				for _, prop := range customProps {
 					if prop.ID == propId {
 						switch prop.Type {
+						case types.CustomPropsTypeUser:
+							if patch.Value == "" {
+								return nil
+							}
+							dep := dependency.FromContext(ctx)
+							id, err := dep.HashIDEncoder().Decode(patch.Value, hashid.UserID)
+							if err != nil {
+								return fmt.Errorf("invalid user reference")
+							}
+							if _, err := dep.UserClient().GetByID(ctx, id); err != nil {
+								return fmt.Errorf("referenced user does not exist")
+							}
+							return nil
 						case types.CustomPropsTypeText:
 							if prop.Min > 0 && prop.Min > len(patch.Value) {
 								return fmt.Errorf("value is too short")

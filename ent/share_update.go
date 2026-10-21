@@ -57,6 +57,27 @@ func (su *ShareUpdate) ClearDeletedAt() *ShareUpdate {
 	return su
 }
 
+// SetPrice sets the "price" field.
+func (su *ShareUpdate) SetPrice(i int64) *ShareUpdate {
+	su.mutation.ResetPrice()
+	su.mutation.SetPrice(i)
+	return su
+}
+
+// SetNillablePrice sets the "price" field if the given value is not nil.
+func (su *ShareUpdate) SetNillablePrice(i *int64) *ShareUpdate {
+	if i != nil {
+		su.SetPrice(*i)
+	}
+	return su
+}
+
+// AddPrice adds i to the "price" field.
+func (su *ShareUpdate) AddPrice(i int64) *ShareUpdate {
+	su.mutation.AddPrice(i)
+	return su
+}
+
 // SetPassword sets the "password" field.
 func (su *ShareUpdate) SetPassword(s string) *ShareUpdate {
 	su.mutation.SetPassword(s)
@@ -275,7 +296,20 @@ func (su *ShareUpdate) defaults() error {
 	return nil
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (su *ShareUpdate) check() error {
+	if v, ok := su.mutation.Price(); ok {
+		if err := share.PriceValidator(v); err != nil {
+			return &ValidationError{Name: "price", err: fmt.Errorf(`ent: validator failed for field "Share.price": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (su *ShareUpdate) sqlSave(ctx context.Context) (n int, err error) {
+	if err := su.check(); err != nil {
+		return n, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(share.Table, share.Columns, sqlgraph.NewFieldSpec(share.FieldID, field.TypeInt))
 	if ps := su.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -292,6 +326,12 @@ func (su *ShareUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if su.mutation.DeletedAtCleared() {
 		_spec.ClearField(share.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := su.mutation.Price(); ok {
+		_spec.SetField(share.FieldPrice, field.TypeInt64, value)
+	}
+	if value, ok := su.mutation.AddedPrice(); ok {
+		_spec.AddField(share.FieldPrice, field.TypeInt64, value)
 	}
 	if value, ok := su.mutation.Password(); ok {
 		_spec.SetField(share.FieldPassword, field.TypeString, value)
@@ -433,6 +473,27 @@ func (suo *ShareUpdateOne) SetNillableDeletedAt(t *time.Time) *ShareUpdateOne {
 // ClearDeletedAt clears the value of the "deleted_at" field.
 func (suo *ShareUpdateOne) ClearDeletedAt() *ShareUpdateOne {
 	suo.mutation.ClearDeletedAt()
+	return suo
+}
+
+// SetPrice sets the "price" field.
+func (suo *ShareUpdateOne) SetPrice(i int64) *ShareUpdateOne {
+	suo.mutation.ResetPrice()
+	suo.mutation.SetPrice(i)
+	return suo
+}
+
+// SetNillablePrice sets the "price" field if the given value is not nil.
+func (suo *ShareUpdateOne) SetNillablePrice(i *int64) *ShareUpdateOne {
+	if i != nil {
+		suo.SetPrice(*i)
+	}
+	return suo
+}
+
+// AddPrice adds i to the "price" field.
+func (suo *ShareUpdateOne) AddPrice(i int64) *ShareUpdateOne {
+	suo.mutation.AddPrice(i)
 	return suo
 }
 
@@ -667,7 +728,20 @@ func (suo *ShareUpdateOne) defaults() error {
 	return nil
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (suo *ShareUpdateOne) check() error {
+	if v, ok := suo.mutation.Price(); ok {
+		if err := share.PriceValidator(v); err != nil {
+			return &ValidationError{Name: "price", err: fmt.Errorf(`ent: validator failed for field "Share.price": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (suo *ShareUpdateOne) sqlSave(ctx context.Context) (_node *Share, err error) {
+	if err := suo.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(share.Table, share.Columns, sqlgraph.NewFieldSpec(share.FieldID, field.TypeInt))
 	id, ok := suo.mutation.ID()
 	if !ok {
@@ -701,6 +775,12 @@ func (suo *ShareUpdateOne) sqlSave(ctx context.Context) (_node *Share, err error
 	}
 	if suo.mutation.DeletedAtCleared() {
 		_spec.ClearField(share.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := suo.mutation.Price(); ok {
+		_spec.SetField(share.FieldPrice, field.TypeInt64, value)
+	}
+	if value, ok := suo.mutation.AddedPrice(); ok {
+		_spec.AddField(share.FieldPrice, field.TypeInt64, value)
 	}
 	if value, ok := suo.mutation.Password(); ok {
 		_spec.SetField(share.FieldPassword, field.TypeString, value)

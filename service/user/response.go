@@ -161,6 +161,21 @@ func BuildWebAuthnList(credentials []webauthn.Credential) []WebAuthnCredentials 
 
 // BuildUser 序列化用户
 func BuildUser(user *ent.User, idEncoder hashid.Encoder) User {
+	pinned := append([]types.PinedFile(nil), user.Settings.Pined...)
+	if user.Edges.Group != nil && user.Edges.Group.Settings != nil {
+		for _, item := range user.Edges.Group.Settings.DefaultPinned {
+			found := false
+			for _, existing := range pinned {
+				if existing.Uri == item.Uri {
+					found = true
+					break
+				}
+			}
+			if !found {
+				pinned = append(pinned, item)
+			}
+		}
+	}
 	return User{
 		ID:                  hashid.EncodeUserID(idEncoder, user.ID),
 		Email:               user.Email,
@@ -171,7 +186,7 @@ func BuildUser(user *ent.User, idEncoder hashid.Encoder) User {
 		PreferredTheme:      user.Settings.PreferredTheme,
 		Anonymous:           user.ID == 0,
 		Group:               BuildGroup(user.Edges.Group, idEncoder),
-		Pined:               user.Settings.Pined,
+		Pined:               pinned,
 		Language:            user.Settings.Language,
 		DisableViewSync:     user.Settings.DisableViewSync,
 		ShareLinksInProfile: user.Settings.ShareLinksInProfile,

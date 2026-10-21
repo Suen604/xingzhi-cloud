@@ -4,6 +4,18 @@ package ent
 
 // SetUpdatedAt sets the "updated_at" field.
 
+func (m *AbuseReportMutation) SetRawID(t int) {
+	m.id = &t
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+
+func (m *AuditLogMutation) SetRawID(t int) {
+	m.id = &t
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+
 func (m *DavAccountMutation) SetRawID(t int) {
 	m.id = &t
 }
@@ -22,13 +34,31 @@ func (m *EntityMutation) SetRawID(t int) {
 
 // SetUpdatedAt sets the "updated_at" field.
 
+func (m *ExternalIdentityMutation) SetRawID(t int) {
+	m.id = &t
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+
 func (m *FileMutation) SetRawID(t int) {
 	m.id = &t
 }
 
 // SetUpdatedAt sets the "updated_at" field.
 
+func (m *FilePermissionMutation) SetRawID(t int) {
+	m.id = &t
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+
 func (m *FsEventMutation) SetRawID(t int) {
+	m.id = &t
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+
+func (m *GiftCodeMutation) SetRawID(t int) {
 	m.id = &t
 }
 
@@ -65,6 +95,12 @@ func (m *OAuthGrantMutation) SetRawID(t int) {
 // SetUpdatedAt sets the "updated_at" field.
 
 func (m *PasskeyMutation) SetRawID(t int) {
+	m.id = &t
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+
+func (m *PurchaseOrderMutation) SetRawID(t int) {
 	m.id = &t
 }
 

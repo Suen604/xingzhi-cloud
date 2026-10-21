@@ -58,6 +58,7 @@ type (
 )
 
 func (s *ShareInfoService) Get(c *gin.Context) (*explorer.Share, error) {
+	c.Header("Cache-Control", "private, no-store")
 	dep := dependency.FromContext(c)
 	u := inventory.UserFromContext(c)
 	shareClient := dep.ShareClient()
@@ -89,6 +90,10 @@ func (s *ShareInfoService) Get(c *gin.Context) (*explorer.Share, error) {
 	base := dep.SettingProvider().SiteURL(c)
 	res := explorer.BuildShare(c, share, base, dep.HashIDEncoder(), u, share.Edges.User, share.Edges.File.Name,
 		types.FileType(share.Edges.File.Type), unlocked, false)
+	res.Purchased, err = inventory.CanAccessPaidShare(c, dep.DBClient(), share, u)
+	if err != nil {
+		return nil, serializer.NewError(serializer.CodeDBError, "failed to check share purchase", err)
+	}
 
 	if s.OwnerExtended && share.Edges.User.ID == u.ID {
 		// Add more information about the shared file
